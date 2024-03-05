@@ -21,7 +21,7 @@ namespace trial_controller
         auto* state_interface = robot_hw->get<franka_hw::FrankaStateInterface>();
         if (state_interface == nullptr) {
             ROS_ERROR_STREAM(
-                "CartesianImpedanceExampleController: Error getting state interface from hardware");
+                "TrialController: Error getting state interface from hardware");
             return false;
         }
         try {
@@ -29,7 +29,7 @@ namespace trial_controller
                 state_interface->getHandle(arm_id + "_robot"));
         } catch (hardware_interface::HardwareInterfaceException& ex) {
             ROS_ERROR_STREAM(
-                "CartesianImpedanceExampleController: Exception getting state handle from interface: "
+                "TrialController: Exception getting state handle from interface: "
                 << ex.what());
             return false;
         }
@@ -37,7 +37,7 @@ namespace trial_controller
         auto* effort_joint_interface = robot_hw->get<hardware_interface::EffortJointInterface>();
         if (effort_joint_interface == nullptr) {
             ROS_ERROR_STREAM(
-                "CartesianImpedanceExampleController: Error getting effort joint interface from hardware");
+                "TrialController: Error getting effort joint interface from hardware");
             return false;
         }
         for (size_t i = 0; i < 7; ++i) {
@@ -45,16 +45,15 @@ namespace trial_controller
             joint_handles_.push_back(effort_joint_interface->getHandle(joint_names[i]));
             } catch (const hardware_interface::HardwareInterfaceException& ex) {
             ROS_ERROR_STREAM(
-                "CartesianImpedanceExampleController: Exception getting joint handles: " << ex.what());
+                "TrialController: Exception getting joint handles: " << ex.what());
             return false;
             }
         }
         char array[] = "enx00e04c6875c3";
         char *cstr = array;
-        FT_sensor.~ecatCommATIAxiaFTSensor();
-        new(&FT_sensor) panda_ecat_comm::ecatCommATIAxiaFTSensor(cstr,5000,5);
-        FT_sensor.set_bias = 1;
-        FT_sensor.filter = 0;
+        int slaves[1] = {2};
+        FT_sensor.ecatinit(slaves,cstr,500);
+        FT_sensor.send_control_code(1,0,0,0,2);
         return true;
     }
     
@@ -62,10 +61,12 @@ namespace trial_controller
     {
         Eigen::Matrix<double,7,1> tau_d;
         tau_d.setZero();
+        FT_sensor.send_control_code(0,0,0,0,2);
+        Eigen::Matrix<double,6,1> F_ext_S_s;
+        F_ext_S_s = FT_sensor.get_F_ext_S_s();
+        std::cout << F_ext_S_s[2] << std::endl;
         for (size_t i = 0; i < 7; ++i)
         {
-            FT_sensor.set_bias = 0;
-            std::cout << (((double)FT_sensor.read_data_ATIAxiaFTSensor.Fz)/1000000)/9.80665 << std::endl;
             joint_handles_[i].setCommand(tau_d(i));
         }
     }
