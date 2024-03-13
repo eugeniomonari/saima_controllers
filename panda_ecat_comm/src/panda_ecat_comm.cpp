@@ -2,20 +2,24 @@
 
 namespace panda_ecat_comm
 {
-    Eigen::Matrix<double,6,1> ecatCommATIAxiaFTSensor::get_F_ext_S_s()
+    template<size_t I>
+    Eigen::Matrix<double,6,1> get_F_ext_S_s_gen(void* ptr)
     {
+        auto foo = static_cast<ecatCommATIAxiaFTSensor*>(ptr);
         Eigen::Matrix<double,6,1>F_ext_S_s;
-        F_ext_S_s[0] = ((double)std::get<0>(inputs).Fx)/1000000;
-        F_ext_S_s[1] = ((double)std::get<0>(inputs).Fy)/1000000;
-        F_ext_S_s[2] = ((double)std::get<0>(inputs).Fz)/1000000;
-        F_ext_S_s[3] = ((double)std::get<0>(inputs).Tx)/1000000;
-        F_ext_S_s[4] = ((double)std::get<0>(inputs).Ty)/1000000;
-        F_ext_S_s[5] = ((double)std::get<0>(inputs).Tz)/1000000;
+        F_ext_S_s[0] = ((double)std::get<I>(foo->inputs).Fx)/1000000;
+        F_ext_S_s[1] = ((double)std::get<I>(foo->inputs).Fy)/1000000;
+        F_ext_S_s[2] = ((double)std::get<I>(foo->inputs).Fz)/1000000;
+        F_ext_S_s[3] = ((double)std::get<I>(foo->inputs).Tx)/1000000;
+        F_ext_S_s[4] = ((double)std::get<I>(foo->inputs).Ty)/1000000;
+        F_ext_S_s[5] = ((double)std::get<I>(foo->inputs).Tz)/1000000;
         return F_ext_S_s;
     }
     
-    void ecatCommATIAxiaFTSensor::send_control_code(int set_bias, int clear_bias, int filter, int calibration, int sample_rate)
+    template<size_t I>
+    void send_control_code_gen(int set_bias, int clear_bias, int filter, int calibration, int sample_rate, void* ptr)
     {
+        auto foo = static_cast<ecatCommATIAxiaFTSensor*>(ptr);
         uint32_t control_code = 0;
         if (set_bias <= 1)
         {
@@ -58,7 +62,18 @@ namespace panda_ecat_comm
             std::cout << "out_ATIAxiaFTSensor: invalid control code for sample_rate." << std::endl;
         }
         
-        std::get<0>(outputs).Control1 = control_code;
-        std::get<0>(outputs).Control2 = 0;
+        std::get<I>(foo->outputs).Control1 = control_code;
+        std::get<I>(foo->outputs).Control2 = 0;
     }
+    
+    void ecatCommATIAxiaFTSensor::send_control_code(int set_bias, int clear_bias, int filter, int calibration, int sample_rate)
+    {
+        send_control_code_gen<0>(set_bias,clear_bias,filter,calibration,sample_rate,this);
+    }
+    
+    Eigen::Matrix<double,6,1> ecatCommATIAxiaFTSensor::get_F_ext_S_s()
+    {
+        return get_F_ext_S_s_gen<0>(this);
+    }
+
 }

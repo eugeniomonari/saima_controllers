@@ -54,6 +54,7 @@ namespace trial_controller
         int slaves[1] = {2};
         FT_sensor.ecatinit(slaves,cstr,500);
         FT_sensor.send_control_code(1,0,0,0,2);
+        ros::Duration(0.01).sleep();
         return true;
     }
     
