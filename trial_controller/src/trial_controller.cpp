@@ -33,6 +33,22 @@ namespace trial_controller
                 << ex.what());
             return false;
         }
+        
+        auto* model_interface = robot_hw->get<franka_hw::FrankaModelInterface>();
+        if (model_interface == nullptr) {
+            ROS_ERROR_STREAM(
+                "TrialController: Error getting model interface from hardware");
+            return false;
+        }
+        try {
+            model_handle_ = std::make_unique<franka_hw::FrankaModelHandle>(
+                model_interface->getHandle(arm_id + "_model"));
+        } catch (hardware_interface::HardwareInterfaceException& ex) {
+            ROS_ERROR_STREAM(
+                "TrialController: Exception getting model handle from interface: "
+                << ex.what());
+            return false;
+        }
 
         auto* effort_joint_interface = robot_hw->get<hardware_interface::EffortJointInterface>();
         if (effort_joint_interface == nullptr) {
@@ -60,16 +76,27 @@ namespace trial_controller
     
     void TrialController::update(const ros::Time&, const ros::Duration& period)
     {
+        data_extraction_.started = true;
         Eigen::Matrix<double,7,1> tau_d;
         tau_d.setZero();
         FT_sensor.send_control_code(0,0,0,0,2);
         Eigen::Matrix<double,6,1> F_ext_S_s;
         F_ext_S_s = FT_sensor.get_F_ext_S_s();
-        std::cout << F_ext_S_s[2] << std::endl;
         for (size_t i = 0; i < 7; ++i)
         {
             joint_handles_[i].setCommand(tau_d(i));
         }
+//         data_extraction_.update_data(&state_handle_,&model_handle_);
+        std::vector<Eigen::VectorXd> custom_data(1);
+        custom_data[0] = F_ext_S_s;
+        data_extraction_.update_data(&state_handle_,&model_handle_,custom_data);
+    }
+    
+    void TrialController::stopping(const ros::Time&)
+    {
+        std::vector<std::string> custom_header_values{"F_ext_S_s"};
+        data_extraction_.write_data_to_csv(custom_header_values);
+        data_extraction_.started = false;
     }
 }
 

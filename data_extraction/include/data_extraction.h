@@ -1,54 +1,42 @@
-// #pragma once
-// 
-// #include <controller_interface/multi_interface_controller.h>
-// #include <hardware_interface/robot_hw.h>
-// #include <ros/node_handle.h>
-// #include <ros/time.h>
-// #include <franka_hw/franka_state_interface.h>
-// #include <franka_hw/franka_model_interface.h>
-// #include <panda_ecat_comm.h>
-// 
-// #include <boost/circular_buffer.hpp>
-// 
-// 
-// namespace data_extraction
-// {
-//     
-//     struct RobotModel {
-//         std::array<double, 16> pose;
-//         std::array<double, 42> zeroJacobian;
-//         std::array<double, 7> gravity;
-//         std::array<double, 7> coriolis;
-//         std::array<double, 49> mass;
-//     };
-//     
-//     struct RobotCommand {
-//         franka::JointPositions joint_positions{0, 0, 0, 0, 0, 0, 0};
-//         franka::JointVelocities joint_velocities{0, 0, 0, 0, 0, 0, 0};
-//         franka::CartesianPose cartesian_pose{1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1};
-//         franka::CartesianVelocities cartesian_velocities{0, 0, 0, 0, 0, 0};
-//         franka::Torques torques{0, 0, 0, 0, 0, 0, 0};
-//         std::array<double, 7> dq_d_code{0, 0, 0, 0, 0, 0, 0};
-//         std::array<bool, 1> locked{true};
-//     };
-//     
-//     struct RecordData
-//     {
-//         double time;
-//         franka::RobotState state;
-//         RobotModel model;
-//         RobotCommand command;
-//         Eigen::Matrix<double, 6, 1> F_ext_S_s; 
-//     };
-//     
-//     class DataExtraction : public controller_interface::MultiInterfaceController<franka_hw::FrankaStateInterface,franka_hw::FrankaModelInterface>
-//     {
-//     public: 
-//         bool init(hardware_interface::RobotHW* robot_hw, ros::NodeHandle& node_handle) override;
-//         void update(const ros::Time&, const ros::Duration& period) override;
-//     private:
-//         std::unique_ptr<franka_hw::FrankaStateHandle> state_handle_;
-//         std::unique_ptr<franka_hw::FrankaModelHandle> model_handle_;
-//         panda_ecat_comm::ecatCommATIAxiaFTSensor FT_sensor;
-//     };
-// }
+#pragma once
+
+#include <panda_ecat_comm.h>
+#include <franka_hw/franka_state_interface.h>
+#include <franka_hw/franka_model_interface.h>
+
+namespace data_extraction
+{
+    typedef std::tuple<std::array<double,16>,std::array<double,7>> state_datat; //O_T_EE,dq
+    typedef std::tuple<std::array<double,42>> model_datat; //zeroJacobian
+    template<typename ... input_t>
+    using tuple_cat_t=
+    decltype(std::tuple_cat(
+        std::declval<input_t>()...
+    ));
+    typedef tuple_cat_t<state_datat,model_datat> state_model_data_t;
+    std::vector<std::string> state_header = {"O_T_EE","dq"};
+    std::vector<std::string> model_header = {"zeroJacobian"};
+    template <typename data>
+    class DataExtraction
+    {
+    public:
+        std::vector<data> data_buffer;
+        std::ostringstream csv_header;
+        std::ostringstream csv_data;
+        bool started = false;
+        
+        void update_data(std::unique_ptr<franka_hw::FrankaStateHandle> *state_handle, std::unique_ptr<franka_hw::FrankaModelHandle> *model_handle, std::vector<Eigen::VectorXd> custom_data = std::vector<Eigen::VectorXd>());
+        void update_data_state(std::unique_ptr<franka_hw::FrankaStateHandle> *state_handle, data *current_data);
+        template<size_t I = 0>
+        void update_data_model(std::unique_ptr<franka_hw::FrankaModelHandle> *model_handle, data *current_data);
+        template<size_t I = 0>
+        void update_data_custom(data *current_data,std::vector<Eigen::VectorXd> custom_data);
+        void write_data_to_csv(std::vector<std::string> custom_headers = std::vector<std::string>());
+        template<size_t I = 0>
+        void write_header(std::vector<std::string> header_values);
+        template<size_t I = 0>
+        void write_csv_data_line(data data_line);
+    };
+}
+
+#include <data_extraction.tpp>

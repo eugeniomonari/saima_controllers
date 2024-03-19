@@ -11,6 +11,7 @@ find_package(catkin REQUIRED COMPONENTS
   hardware_interface
   pluginlib
   panda_ecat_comm
+  data_extraction
 )
 
 find_package(Eigen3 REQUIRED)
@@ -25,6 +26,7 @@ catkin_package(
     hardware_interface
     pluginlib
     panda_ecat_comm
+    data_extraction
   DEPENDS Franka
 )
 

@@ -6,11 +6,8 @@ set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 find_package(catkin REQUIRED COMPONENTS
-  controller_interface
-  franka_hw
-  hardware_interface
-  pluginlib
   panda_ecat_comm
+  franka_hw
 )
 
 find_package(Eigen3 REQUIRED)
@@ -20,52 +17,49 @@ catkin_package(
   INCLUDE_DIRS include
   LIBRARIES data_extraction
   CATKIN_DEPENDS
-    controller_interface
-    franka_hw
-    hardware_interface
-    pluginlib
     panda_ecat_comm
+    franka_hw
   DEPENDS Franka
 )
 
-add_library(data_extraction
-  src/data_extraction.cpp
-)
+#add_library(data_extraction
+  #src/data_extraction.cpp
+#)
 
-add_dependencies(data_extraction
-  ${${PROJECT_NAME}_EXPORTED_TARGETS}
-  ${catkin_EXPORTED_TARGETS}
-)
+#add_dependencies(data_extraction
+  #${${PROJECT_NAME}_EXPORTED_TARGETS}
+  #${catkin_EXPORTED_TARGETS}
+#)
 
-target_link_libraries(data_extraction PUBLIC
-  ${Franka_LIBRARIES}
-  ${catkin_LIBRARIES}
-)
+#target_link_libraries(data_extraction PUBLIC
+  #${Franka_LIBRARIES}
+  #${catkin_LIBRARIES}
+#)
 
-target_include_directories(data_extraction SYSTEM PUBLIC
-  ${Franka_INCLUDE_DIRS}
-  ${EIGEN3_INCLUDE_DIRS}
-  ${catkin_INCLUDE_DIRS}
-)
-target_include_directories(data_extraction PUBLIC
-  include
-)
+#target_include_directories(data_extraction SYSTEM PUBLIC
+  #${Franka_INCLUDE_DIRS}
+  #${EIGEN3_INCLUDE_DIRS}
+  #${catkin_INCLUDE_DIRS}
+#)
+#target_include_directories(data_extraction PUBLIC
+  #include
+#)
 
 ## Installation
-install(TARGETS data_extraction
-  ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
-  LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
-  RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
-)
-install(DIRECTORY launch
-  DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}
-)
-install(DIRECTORY config
-  DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}
-)
-install(FILES data_extraction_plugin.xml
-  DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}
-)
+#install(TARGETS data_extraction
+  #ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
+  #LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
+  #RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
+#)
+#install(DIRECTORY launch
+  #DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}
+#)
+#install(DIRECTORY config
+  #DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}
+#)
+#install(FILES data_extraction_plugin.xml
+  #DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}
+#)
 
 ## Tools
 include(${CMAKE_CURRENT_LIST_DIR}/../cmake/ClangTools.cmake OPTIONAL

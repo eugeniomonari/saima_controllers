@@ -1,5 +1,0 @@
-<library path="lib/libdata_extraction">
-  <class name="data_extraction/DataExtraction" type="data_extraction::DataExtraction" base_class_type="controller_interface::ControllerBase"> </class>
-</library>
-
-

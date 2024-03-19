@@ -13,6 +13,7 @@
   <depend>hardware_interface</depend>
   <depend>libfranka</depend>
   <depend>pluginlib</depend>
+  <depend>data_extraction</depend>
 
   <exec_depend>franka_control</exec_depend>
   
