@@ -27,5 +27,7 @@ namespace trial_controller
         typedef data_extraction::tuple_cat_t<data_extraction::state_model_data_t,custom_data_t> state_model_custom_data_t;
         data_extraction::DataExtraction<state_model_custom_data_t> data_extraction_;
 //         data_extraction::DataExtraction<data_extraction::state_model_data_t> data_extraction_;
+        std::vector<double> optimization_params_;
+        bool printed = false;
     };
 }

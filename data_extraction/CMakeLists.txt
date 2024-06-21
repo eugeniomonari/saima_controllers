@@ -15,7 +15,6 @@ find_package(Franka 0.7.0 REQUIRED)
 
 catkin_package(
   INCLUDE_DIRS include
-  LIBRARIES data_extraction
   CATKIN_DEPENDS
     panda_ecat_comm
     franka_hw

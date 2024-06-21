@@ -14,7 +14,9 @@ find_package(catkin REQUIRED COMPONENTS
   data_extraction
 )
 
+
 find_package(Eigen3 REQUIRED)
+
 find_package(Franka 0.7.0 REQUIRED)
 
 catkin_package(
@@ -42,6 +44,9 @@ add_dependencies(trial_controller
 target_link_libraries(trial_controller PUBLIC
   ${Franka_LIBRARIES}
   ${catkin_LIBRARIES}
+  /home/saima/eugenio/panda_robot/catkin_ws/the_optimizer/target/release/libthe_optimizer.a
+  /home/saima/eugenio/panda_robot/catkin_ws/optimizer1/target/release/liboptimizer1.a
+  /home/saima/eugenio/panda_robot/catkin_ws/optimizer2/target/release/liboptimizer2.a
 )
 
 target_include_directories(trial_controller SYSTEM PUBLIC

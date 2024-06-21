@@ -3,17 +3,27 @@
 namespace panda_ecat_comm
 {
     template<size_t I>
-    Eigen::Matrix<double,6,1> get_F_ext_S_s_gen(void* ptr)
+    Eigen::Matrix<double,6,1> get_FT_sensor_data_gen(void* ptr)
     {
         auto foo = static_cast<ecatCommATIAxiaFTSensor*>(ptr);
-        Eigen::Matrix<double,6,1>F_ext_S_s;
-        F_ext_S_s[0] = ((double)std::get<I>(foo->inputs).Fx)/1000000;
-        F_ext_S_s[1] = ((double)std::get<I>(foo->inputs).Fy)/1000000;
-        F_ext_S_s[2] = ((double)std::get<I>(foo->inputs).Fz)/1000000;
-        F_ext_S_s[3] = ((double)std::get<I>(foo->inputs).Tx)/1000000;
-        F_ext_S_s[4] = ((double)std::get<I>(foo->inputs).Ty)/1000000;
-        F_ext_S_s[5] = ((double)std::get<I>(foo->inputs).Tz)/1000000;
-        return F_ext_S_s;
+        Eigen::Matrix<double,6,1>FT_sensor_data;
+        if (!foo->error) {
+            FT_sensor_data[0] = ((double)std::get<I>(foo->inputs).Fx)/1000000;
+            FT_sensor_data[1] = ((double)std::get<I>(foo->inputs).Fy)/1000000;
+            FT_sensor_data[2] = ((double)std::get<I>(foo->inputs).Fz)/1000000;
+            FT_sensor_data[3] = ((double)std::get<I>(foo->inputs).Tx)/1000000;
+            FT_sensor_data[4] = ((double)std::get<I>(foo->inputs).Ty)/1000000;
+            FT_sensor_data[5] = ((double)std::get<I>(foo->inputs).Tz)/1000000;
+        }
+        else {
+            FT_sensor_data[0] = 0;
+            FT_sensor_data[1] = 0;
+            FT_sensor_data[2] = 0;
+            FT_sensor_data[3] = 0;
+            FT_sensor_data[4] = 0;
+            FT_sensor_data[5] = 0;
+        }
+        return FT_sensor_data;
     }
     
     template<size_t I>
@@ -71,9 +81,9 @@ namespace panda_ecat_comm
         send_control_code_gen<0>(set_bias,clear_bias,filter,calibration,sample_rate,this);
     }
     
-    Eigen::Matrix<double,6,1> ecatCommATIAxiaFTSensor::get_F_ext_S_s()
+    Eigen::Matrix<double,6,1> ecatCommATIAxiaFTSensor::get_FT_sensor_data()
     {
-        return get_F_ext_S_s_gen<0>(this);
+        return get_FT_sensor_data_gen<0>(this);
     }
 
 }

@@ -7,7 +7,7 @@
 namespace panda_ecat_comm
 {
     template<size_t I>
-    Eigen::Matrix<double,6,1> get_F_ext_S_s_gen(void* ptr);
+    Eigen::Matrix<double,6,1> get_FT_sensor_data_gen(void* ptr);
     template<size_t I>
     void send_control_code_gen(int set_bias, int clear_bias, int filter, int calibration, int sample_rate, void *ptr);
     
@@ -15,6 +15,6 @@ namespace panda_ecat_comm
     {
     public :
         void send_control_code(int set_bias, int clear_bias, int filter, int calibration, int sample_rate);
-        Eigen::Matrix<double,6,1> get_F_ext_S_s();
+        Eigen::Matrix<double,6,1> get_FT_sensor_data();
     };
 }

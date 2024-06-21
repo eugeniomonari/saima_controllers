@@ -9,3 +9,4 @@ trial_controller:
         - panda_joint5
         - panda_joint6
         - panda_joint7
+    optimization_params: [10.0, 1000.0, 1000.0, 1.0, 100.0]

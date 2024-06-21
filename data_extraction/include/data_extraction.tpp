@@ -1,14 +1,22 @@
 #include "data_extraction.h"
 #include <fstream>
 
+#define time_length 600000
+
 namespace data_extraction
-{    
+{
     template <typename data>
-    void DataExtraction<data>::update_data(std::unique_ptr<franka_hw::FrankaStateHandle> *state_handle, std::unique_ptr<franka_hw::FrankaModelHandle> *model_handle,std::vector<Eigen::VectorXd> custom_data)
+    DataExtraction<data>::DataExtraction()
+    {
+        data_buffer.reserve(time_length);
+    }
+    
+    template <typename data>
+    void DataExtraction<data>::update_data(std::unique_ptr<franka_hw::FrankaStateHandle> *state_handle, std::unique_ptr<franka_hw::FrankaModelHandle> *model_handle,const std::vector<Eigen::VectorXd>& custom_data)
     {
         data current_data;
         update_data_state(state_handle,&current_data);
-        update_data_model(model_handle,&current_data);
+        update_data_model(state_handle,model_handle,&current_data);
         if (custom_data.size() > 0)
         {
             update_data_custom(&current_data,custom_data);
@@ -17,49 +25,95 @@ namespace data_extraction
     }
     
     template <typename data>
+    void DataExtraction<data>::update_data(const std::vector<Eigen::VectorXd>& custom_data)
+    {
+        data current_data;
+        if (custom_data.size() > 0)
+        {
+            update_data_custom(&current_data,custom_data,true);
+        }
+        data_buffer.push_back(current_data);
+    }
+    
+    template <typename data>
     void DataExtraction<data>::update_data_state(std::unique_ptr<franka_hw::FrankaStateHandle> *state_handle, data *current_data)
     {
-        std::get<0>(*current_data) = (*state_handle)->getRobotState().O_T_EE;
-        std::get<1>(*current_data) = (*state_handle)->getRobotState().dq;
+        std::array<double,1> success_rate_array;
+        success_rate_array[0] = (*state_handle)->getRobotState().control_command_success_rate;
+        std::get<0>(*current_data) = success_rate_array;
+        std::get<1>(*current_data) = (*state_handle)->getRobotState().O_T_EE;
+        std::get<2>(*current_data) = (*state_handle)->getRobotState().tau_J;
+        std::get<3>(*current_data) = (*state_handle)->getRobotState().tau_J_d;
+        std::get<4>(*current_data) = (*state_handle)->getRobotState().q;
+        std::get<5>(*current_data) = (*state_handle)->getRobotState().q_d;
+        std::get<6>(*current_data) = (*state_handle)->getRobotState().dq;
+        std::get<7>(*current_data) = (*state_handle)->getRobotState().dq_d;
+        std::get<8>(*current_data) = (*state_handle)->getRobotState().ddq_d;
     }
     
     template<typename data>
     template<size_t I>
-    void DataExtraction<data>::update_data_model(std::unique_ptr<franka_hw::FrankaModelHandle> *model_handle, data *current_data)
+    void DataExtraction<data>::update_data_model(std::unique_ptr<franka_hw::FrankaStateHandle> *state_handle, std::unique_ptr<franka_hw::FrankaModelHandle> *model_handle, data *current_data)
     {
         if constexpr(I < std::tuple_size<state_datat>::value)
         {
-            update_data_model<I+1>(model_handle,current_data);
-//             std::get<I>(current_data) = (*model_handle)->getZeroJacobian(franka::Frame::kEndEffector);
+            update_data_model<I+1>(state_handle,model_handle,current_data);
         }
         else if constexpr(I == std::tuple_size<state_datat>::value + 0)
         {
-            std::get<I>(*current_data) = (*model_handle)->getZeroJacobian(franka::Frame::kEndEffector);
-            update_data_model<I+1>(model_handle,current_data);
+            std::get<I>(*current_data) = (*model_handle)->getZeroJacobian(franka::Frame::kEndEffector,(*state_handle)->getRobotState().q_d,(*state_handle)->getRobotState().F_T_EE,(*state_handle)->getRobotState().EE_T_K);
+            update_data_model<I+1>(state_handle,model_handle,current_data);
+        }
+        else if constexpr(I == std::tuple_size<state_datat>::value + 1)
+        {
+            std::get<I>(*current_data) = (*model_handle)->getMass();
+            update_data_model<I+1>(state_handle,model_handle,current_data);
+        }
+        else if constexpr(I == std::tuple_size<state_datat>::value + 2)
+        {
+            std::get<I>(*current_data) = (*model_handle)->getCoriolis();
+            update_data_model<I+1>(state_handle,model_handle,current_data);
+        }
+        else if constexpr(I == std::tuple_size<state_datat>::value + 3)
+        {
+            std::get<I>(*current_data) = (*model_handle)->getGravity();
+            update_data_model<I+1>(state_handle,model_handle,current_data);
         }
     }
     
     template<typename data>
     template<size_t I>
-    void DataExtraction<data>::update_data_custom(data *current_data,std::vector<Eigen::VectorXd> custom_data)
+    void DataExtraction<data>::update_data_custom(data *current_data,const std::vector<Eigen::VectorXd>& custom_data,bool only_custom)
     {
-        
-        if constexpr(I < std::tuple_size<state_datat>::value+std::tuple_size<model_datat>::value)
+        if(!only_custom)
         {
-            update_data_custom<I+1>(current_data,custom_data);
-        }
-        else if constexpr(I < std::tuple_size<data>::value)
-        {
-//             std::cout << custom_data[I-(std::tuple_size<state_datat>::value+std::tuple_size<model_datat>::value)].rows() << std::endl;
-            for (int j = 0; j < custom_data[I-(std::tuple_size<state_datat>::value+std::tuple_size<model_datat>::value)].rows(); j++)
+            if constexpr(I < std::tuple_size<state_datat>::value+std::tuple_size<model_datat>::value)
             {
-                std::get<I>(*current_data)[j] = custom_data[I-(std::tuple_size<state_datat>::value+std::tuple_size<model_datat>::value)][j];
+                update_data_custom<I+1>(current_data,custom_data);
             }
-            update_data_custom<I+1>(current_data,custom_data);
+            else if constexpr(I < std::tuple_size<data>::value)
+            {
+                for (int j = 0; j < custom_data[I-(std::tuple_size<state_datat>::value+std::tuple_size<model_datat>::value)].rows(); j++)
+                {
+                    std::get<I>(*current_data)[j] = custom_data[I-(std::tuple_size<state_datat>::value+std::tuple_size<model_datat>::value)][j];
+                }
+                update_data_custom<I+1>(current_data,custom_data);
+            }
+        }
+        else
+        {
+            if constexpr(I < std::tuple_size<data>::value)
+            {
+                for (int j = 0; j < custom_data[I].rows(); j++)
+                {
+                    std::get<I>(*current_data)[j] = custom_data[I][j];
+                }
+                update_data_custom<I+1>(current_data,custom_data,only_custom);
+            }
         }
     }
     
-    template<typename data> void DataExtraction<data>::write_data_to_csv(std::vector<std::string> custom_headers)
+    template<typename data> void DataExtraction<data>::write_data_to_csv(std::vector<std::string> custom_headers,bool only_custom)
     {
         if (started)
         {
@@ -69,15 +123,24 @@ namespace data_extraction
             std::time(&rawtime);
             timeinfo = localtime(&rawtime);
             strftime(buffer, sizeof(buffer), "%Y_%m_%d_%H_%M_%S_", timeinfo);
-            std::string str(buffer);
-            std::string filename = "/home/saima/recorded_data/recorded_data_" + str + ".csv";
+            std::string date(buffer);
+            date_ = date;
+            std::string filename = "/home/saima/recorded_data/recorded_data_" + date + ".csv";
             std::ofstream myfile;
             myfile.open(filename);
-            std::vector<std::string> header_values = state_header;
-            header_values.insert(header_values.end(),model_header.begin(),model_header.end());
-            if (custom_headers.size() > 0)
+            std::vector<std::string> header_values;
+            if (!only_custom)
             {
-                header_values.insert(header_values.end(),custom_headers.begin(),custom_headers.end());
+                header_values = state_header;
+                header_values.insert(header_values.end(),model_header.begin(),model_header.end());
+                if (custom_headers.size() > 0)
+                {
+                    header_values.insert(header_values.end(),custom_headers.begin(),custom_headers.end());
+                }
+            }
+            else
+            {
+                header_values = custom_headers;
             }
             write_header(header_values);
             myfile << csv_header.str();
