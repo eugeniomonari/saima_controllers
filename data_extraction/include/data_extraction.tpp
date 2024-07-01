@@ -38,17 +38,39 @@ namespace data_extraction
     template <typename data>
     void DataExtraction<data>::update_data_state(std::unique_ptr<franka_hw::FrankaStateHandle> *state_handle, data *current_data)
     {
+        std::array<double,1> time_array;
+        if (!initial_time_set_) {
+            initial_time_ = (*state_handle)->getRobotState().time.toSec();
+            initial_time_set_ = true;
+        }
+        time_array[0] = (*state_handle)->getRobotState().time.toSec()-initial_time_;
+        std::get<0>(*current_data) = time_array;
         std::array<double,1> success_rate_array;
         success_rate_array[0] = (*state_handle)->getRobotState().control_command_success_rate;
-        std::get<0>(*current_data) = success_rate_array;
-        std::get<1>(*current_data) = (*state_handle)->getRobotState().O_T_EE;
-        std::get<2>(*current_data) = (*state_handle)->getRobotState().tau_J;
-        std::get<3>(*current_data) = (*state_handle)->getRobotState().tau_J_d;
-        std::get<4>(*current_data) = (*state_handle)->getRobotState().q;
-        std::get<5>(*current_data) = (*state_handle)->getRobotState().q_d;
-        std::get<6>(*current_data) = (*state_handle)->getRobotState().dq;
-        std::get<7>(*current_data) = (*state_handle)->getRobotState().dq_d;
-        std::get<8>(*current_data) = (*state_handle)->getRobotState().ddq_d;
+        std::get<1>(*current_data) = success_rate_array;
+        std::get<2>(*current_data) = (*state_handle)->getRobotState().O_T_EE;
+        std::get<3>(*current_data) = (*state_handle)->getRobotState().tau_J;
+        std::get<4>(*current_data) = (*state_handle)->getRobotState().tau_J_d;
+        std::get<5>(*current_data) = (*state_handle)->getRobotState().q;
+        std::get<6>(*current_data) = (*state_handle)->getRobotState().q_d;
+        std::get<7>(*current_data) = (*state_handle)->getRobotState().dq;
+        std::get<8>(*current_data) = (*state_handle)->getRobotState().dq_d;
+        std::get<9>(*current_data) = (*state_handle)->getRobotState().ddq_d;
+        std::array<std::string,1> errors_array;
+        std::array<bool,1> errors_array_bool;
+        if (!error_happened) {
+            errors_array[0] = std::string((*state_handle)->getRobotState().current_errors);
+            errors_array_bool[0] = bool((*state_handle)->getRobotState().current_errors);
+            if (bool((*state_handle)->getRobotState().current_errors)) {
+                error_happened = true;
+            }
+        }
+        else {
+            errors_array[0] = std::string((*state_handle)->getRobotState().last_motion_errors);
+            errors_array_bool[0] = bool((*state_handle)->getRobotState().last_motion_errors);
+        }        
+        std::get<10>(*current_data) = errors_array;
+        std::get<11>(*current_data) = errors_array_bool;
     }
     
     template<typename data>
@@ -190,11 +212,11 @@ namespace data_extraction
             {
                 if (I==0 && j==0)
                 {
-                    csv_data << Ith_data[j];
+                    csv_data << std::setprecision(9) << Ith_data[j];
                 }
                 else
                 {
-                    csv_data << "," << Ith_data[j];
+                    csv_data << std::setprecision(9) << "," << Ith_data[j];
                 }
             }
             write_csv_data_line<I+1>(data_line);

@@ -6,7 +6,7 @@
 
 namespace data_extraction
 {
-    typedef std::tuple<std::array<double,1>,std::array<double,16>,std::array<double,7>,std::array<double,7>,std::array<double,7>,std::array<double,7>,std::array<double,7>,std::array<double,7>,std::array<double,7>> state_datat;
+    typedef std::tuple<std::array<double,1>,std::array<double,1>,std::array<double,16>,std::array<double,7>,std::array<double,7>,std::array<double,7>,std::array<double,7>,std::array<double,7>,std::array<double,7>,std::array<double,7>,std::array<std::string,1>,std::array<bool,1>> state_datat;
     typedef std::tuple<std::array<double,42>,std::array<double,49>,std::array<double,7>,std::array<double,7>> model_datat;
     template<typename ... input_t>
     using tuple_cat_t=
@@ -14,7 +14,7 @@ namespace data_extraction
         std::declval<input_t>()...
     ));
     typedef tuple_cat_t<state_datat,model_datat> state_model_data_t;
-    std::vector<std::string> state_header = {"success_rate","O_T_EE","tau_J","tau_J_d","q","q_d","dq","dq_d","ddq_d"};
+    std::vector<std::string> state_header = {"time","success_rate","O_T_EE","tau_J","tau_J_d","q","q_d","dq","dq_d","ddq_d","errors","errors_bool"};
     std::vector<std::string> model_header = {"J","B","c","g"};
     template <typename data>
     class DataExtraction
@@ -40,6 +40,9 @@ namespace data_extraction
         void write_header(std::vector<std::string> header_values);
         template<size_t I = 0>
         void write_csv_data_line(data data_line);
+        double initial_time_ = 0;
+        bool initial_time_set_ = false;
+        bool error_happened = false;
     };
 }
 

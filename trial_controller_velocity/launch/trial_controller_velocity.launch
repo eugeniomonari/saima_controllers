@@ -1,0 +1,23 @@
+<?xml version="1.0" ?>
+<launch>
+  <arg name="robot_ip" default="172.16.0.2"/>
+  <arg name="load_gripper" default="false" />
+  <arg name="move_to_ready" default="true" />
+  <include file="$(find franka_control)/launch/franka_control.launch" >
+    <arg name="robot_ip" value="$(arg robot_ip)" />
+    <arg name="load_gripper" value="$(arg load_gripper)" />
+  </include>
+  <group if="$(arg move_to_ready)">
+    <include file="$(find panda_moveit_config)/launch/panda_moveit.launch">
+      <arg name="load_gripper" value="false" />
+    </include>
+  </group>
+  
+
+  <rosparam command="load" file="$(find trial_controller_velocity)/config/trial_controller_velocity.yaml" />
+<!--   <node name="controller_spawner" pkg="controller_manager" type="spawner" respawn="false" output="screen" args="trial_controller_velocity"/> -->
+  <node name="trial_controller_velocity_node" pkg="trial_controller_velocity" type="trial_controller_velocity.py" output="screen" clear_params="true">
+       <param name="move_to_ready" value="$(arg move_to_ready)" /> 
+  </node>
+<!--   <node name="trial_controller_velocity_node" pkg="trial_controller_velocity_node" type="trial_controller_velocity_node.py" output="screen"/> -->
+</launch>

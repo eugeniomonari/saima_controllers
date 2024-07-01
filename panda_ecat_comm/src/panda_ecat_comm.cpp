@@ -7,22 +7,12 @@ namespace panda_ecat_comm
     {
         auto foo = static_cast<ecatCommATIAxiaFTSensor*>(ptr);
         Eigen::Matrix<double,6,1>FT_sensor_data;
-        if (!foo->error) {
-            FT_sensor_data[0] = ((double)std::get<I>(foo->inputs).Fx)/1000000;
-            FT_sensor_data[1] = ((double)std::get<I>(foo->inputs).Fy)/1000000;
-            FT_sensor_data[2] = ((double)std::get<I>(foo->inputs).Fz)/1000000;
-            FT_sensor_data[3] = ((double)std::get<I>(foo->inputs).Tx)/1000000;
-            FT_sensor_data[4] = ((double)std::get<I>(foo->inputs).Ty)/1000000;
-            FT_sensor_data[5] = ((double)std::get<I>(foo->inputs).Tz)/1000000;
-        }
-        else {
-            FT_sensor_data[0] = 0;
-            FT_sensor_data[1] = 0;
-            FT_sensor_data[2] = 0;
-            FT_sensor_data[3] = 0;
-            FT_sensor_data[4] = 0;
-            FT_sensor_data[5] = 0;
-        }
+        FT_sensor_data[0] = ((double)std::get<I>(foo->inputs).Fx)/1000000;
+        FT_sensor_data[1] = ((double)std::get<I>(foo->inputs).Fy)/1000000;
+        FT_sensor_data[2] = ((double)std::get<I>(foo->inputs).Fz)/1000000;
+        FT_sensor_data[3] = ((double)std::get<I>(foo->inputs).Tx)/1000000;
+        FT_sensor_data[4] = ((double)std::get<I>(foo->inputs).Ty)/1000000;
+        FT_sensor_data[5] = ((double)std::get<I>(foo->inputs).Tz)/1000000;
         return FT_sensor_data;
     }
     
