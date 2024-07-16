@@ -1,0 +1,3 @@
+cargo:rerun-if-changed=src/lib.rs
+cargo:rerun-if-changed=optimizer5_bindings.h
+cargo:rerun-if-changed=optimizer5_bindings.hpp

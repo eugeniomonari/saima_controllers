@@ -11,10 +11,10 @@
 #include <new>
 
 /// Number of decision variables
-static const uintptr_t OPTIMIZER1_NUM_DECISION_VARIABLES = 5;
+static const uintptr_t OPTIMIZER1_NUM_DECISION_VARIABLES = 8;
 
 /// Number of parameters
-static const uintptr_t OPTIMIZER1_NUM_PARAMETERS = 50;
+static const uintptr_t OPTIMIZER1_NUM_PARAMETERS = 73;
 
 /// Number of parameters associated with augmented Lagrangian
 static const uintptr_t OPTIMIZER1_N1 = 0;

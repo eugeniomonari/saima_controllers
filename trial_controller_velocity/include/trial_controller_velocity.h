@@ -10,6 +10,10 @@
 #include <panda_ecat_comm.h>
 #include <data_extraction.h>
 #include <general_functionalities.h>
+#include <optimizer2_bindings.hpp>
+#include <optimizer4_bindings.hpp>
+#include <optimizer5_bindings.hpp>
+#include <qpOASES.hpp>
 
 namespace trial_controller_velocity
 {
@@ -24,14 +28,15 @@ namespace trial_controller_velocity
         std::unique_ptr<franka_hw::FrankaModelHandle> model_handle_;
         std::vector<hardware_interface::JointHandle> joint_handles_;
         panda_ecat_comm::ecatCommATIAxiaFTSensor FT_sensor;
-        typedef std::tuple<std::array<double,6>,std::array<double,7>,std::array<double,7>,std::array<double,7>,std::array<double,7>,std::array<double,1>,std::array<double,1>> custom_data_t;
+        typedef std::tuple<std::array<double,6>,std::array<double,6>,std::array<double,6>,std::array<double,7>,std::array<double,7>,std::array<double,2>,std::array<double,7>,std::array<double,7>,std::array<double,7>,std::array<double,7>,std::array<double,1>,std::array<double,1>> custom_data_t;
         typedef data_extraction::tuple_cat_t<data_extraction::state_model_data_t,custom_data_t> state_model_custom_data_t;
         data_extraction::DataExtraction<state_model_custom_data_t> data_extraction_;
         general_functionalities::locking lockingFunction;
         double T_ = 0.001;
-        double mass[6] = {3,3,3,0.3,0.3,0.3};
+        double mass_[6] = {5,5,5,0.2,0.2,0.2};
+        double damping_[6] = {5,5,5,0.2,0.2,0.2};
         double damping[6] = {10,10,10,0.8,0.8,0.8};
-        Eigen::Matrix<double,6,1> F_ext_O_lowpass_prev_;
+        Eigen::Matrix<double,6,1> F_ext_EE_0_lowpass_prev_;
         double kDeltaT = 1e-3;
         double kLimitEps = 1e-3;
         double kTolNumberPacketsLost = 3.0;
@@ -52,6 +57,9 @@ namespace trial_controller_velocity
         Eigen::Matrix<double,2,1> setSafeVelocities(double max_velocity,double max_acceleration,double max_jerk,double last_commanded_velocity,double last_commanded_acceleration);
         general_functionalities::EEPoleBaseFrameExtWrenchComputation external_force_computation;
         general_functionalities::initial_operations initOperations;
+        bool error = false;
+        
+//         bool qp_oases_first_done = false;
     };
         
 }

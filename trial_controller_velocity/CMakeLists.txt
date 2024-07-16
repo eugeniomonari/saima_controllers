@@ -13,6 +13,7 @@ find_package(catkin REQUIRED COMPONENTS
   panda_ecat_comm
   data_extraction
   general_functionalities
+  qpoases
 )
 
 
@@ -31,6 +32,7 @@ catkin_package(
     panda_ecat_comm
     data_extraction
     general_functionalities
+    qpoases
   DEPENDS Franka
 )
 
@@ -44,7 +46,10 @@ add_dependencies(trial_controller_velocity
 )
 
 target_link_libraries(trial_controller_velocity PUBLIC
-  ${CMAKE_CURRENT_SOURCE_DIR}/optimizer1/target/release/liboptimizer1.a
+  #${CMAKE_CURRENT_SOURCE_DIR}/optimizer1/target/release/liboptimizer1.a
+  ${CMAKE_CURRENT_SOURCE_DIR}/optimizer2/target/release/liboptimizer2.a
+  ${CMAKE_CURRENT_SOURCE_DIR}/optimizer4/target/release/liboptimizer4.a
+  ${CMAKE_CURRENT_SOURCE_DIR}/optimizer5/target/release/liboptimizer5.a
   ${Franka_LIBRARIES}
   ${catkin_LIBRARIES}
 )
@@ -56,7 +61,10 @@ target_include_directories(trial_controller_velocity SYSTEM PUBLIC
 )
 target_include_directories(trial_controller_velocity PUBLIC
   include
-  optimizer1
+  #optimizer1
+  optimizer2
+  optimizer4
+  optimizer5
 )
 
 ## Installation
