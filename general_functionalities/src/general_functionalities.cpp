@@ -120,7 +120,7 @@ namespace general_functionalities
             return false;
             }
         }
-            char array[] = "enx00e04c6875c3";
+            char array[] = "enxa0cec88b0292";
             char *cstr = array;
             int slaves[1] = {2};
             FT_sensor.ecatinit(slaves,cstr,500);

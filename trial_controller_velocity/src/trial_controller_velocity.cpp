@@ -2,14 +2,77 @@
 #include <Eigen/Dense>
 #include <pluginlib/class_list_macros.h>
 #include <franka/rate_limiting.h>
-// #include <optimizer1_bindings.hpp>
+
+#include <qpOASES.hpp>
 
 namespace trial_controller_velocity
 {
     bool TrialControllerVelocity::init(hardware_interface::RobotHW* robot_hw, ros::NodeHandle& node_handle)
     {
-        initOperations.initFrankaVelFT(robot_hw,&state_handle_,&model_handle_,&joint_handles_,FT_sensor,external_force_computation,0);
+        if (!node_handle.getParam("only_damping", only_damping_)) {
+            ROS_ERROR_STREAM("HandGuidanceController: could not get only_damping from parameter server");
+            return false;
+        }
+        if (!only_damping_) {
+            if (!node_handle.getParam("small_mass", small_mass_)) {
+                ROS_ERROR_STREAM("HandGuidanceController: could not get small_mass from parameter server");
+                return false;
+            }
+        }
+        if (only_damping_ || (!only_damping_ && small_mass_)) {
+            initOperations.initFrankaVelFT(robot_hw,&state_handle_,&model_handle_,&joint_handles_,FT_sensor,external_force_computation,7);
+            if (!node_handle.getParam("only_x", only_x_)) {
+                ROS_ERROR_STREAM("HandGuidanceController: could not get only_x from parameter server");
+                return false;
+            }
+            if (!node_handle.getParam("m_tr_no_mass", m_tr_)) {
+                ROS_ERROR_STREAM("HandGuidanceController: could not get m_tr_no_mass from parameter server");
+                return false;
+            }
+            if (!node_handle.getParam("m_rot_no_mass", m_rot_)) {
+                ROS_ERROR_STREAM("HandGuidanceController: could not get m_rot_no_mass from parameter server");
+                return false;
+            }
+            if (!node_handle.getParam("d_tr_no_mass", d_tr_)) {
+                ROS_ERROR_STREAM("HandGuidanceController: could not get d_tr_no_mass from parameter server");
+                return false;
+            }
+            if (!node_handle.getParam("d_rot_no_mass", d_rot_)) {
+                ROS_ERROR_STREAM("HandGuidanceController: could not get d_rot_no_mass from parameter server");
+                return false;
+            }
+        }
+        else {
+            initOperations.initFrankaVelFT(robot_hw,&state_handle_,&model_handle_,&joint_handles_,FT_sensor,external_force_computation,0);
+            if (!node_handle.getParam("m_tr", m_tr_)) {
+                ROS_ERROR_STREAM("HandGuidanceController: could not get m_tr from parameter server");
+                return false;
+            }
+            if (!node_handle.getParam("m_rot", m_rot_)) {
+                ROS_ERROR_STREAM("HandGuidanceController: could not get m_rot from parameter server");
+                return false;
+            }
+            if (!node_handle.getParam("d_tr", d_tr_)) {
+                ROS_ERROR_STREAM("HandGuidanceController: could not get d_tr from parameter server");
+                return false;
+            }
+            if (!node_handle.getParam("d_rot", d_rot_)) {
+                ROS_ERROR_STREAM("HandGuidanceController: could not get d_rot from parameter server");
+                return false;
+            }
+        }
         F_ext_EE_0_lowpass_prev_.setZero();
+
+        if (!node_handle.getParam("only_transl", only_transl_)) {
+            ROS_ERROR_STREAM("HandGuidanceController: could not get only_transl from parameter server");
+            return false;
+        }
+        
+        dynamic_reconfigure_trial_controller_velocity_param_node_ =
+        ros::NodeHandle("dynamic_reconfigure_trial_controller_velocity_param_node");
+        dynamic_server_trial_controller_velocity_param_ = std::make_unique<dynamic_reconfigure::Server<trial_controller_velocity::trial_controller_velocity_paramConfig>>( dynamic_reconfigure_trial_controller_velocity_param_node_);
+        dynamic_server_trial_controller_velocity_param_->setCallback(boost::bind(&TrialControllerVelocity::trialControllerVelocityParamCallback, this, _1, _2));
+        
         return true;
     }
     
@@ -25,10 +88,11 @@ namespace trial_controller_velocity
         Eigen::Map<Eigen::Matrix<double, 4, 4>> O_T_EE(robot_state.O_T_EE.data());
         Eigen::Matrix<double,6,1> F_ext_EE_0 = external_force_computation.computeEEPoleBaseFrameExtWrench(O_T_EE,F_ext_S_s,initOperations.bias_checked,initOperations.bias_error,FT_sensor.ecat_error);
         lockingFunction.locking_unlocking(F_ext_EE_0.head(3));
-        bool only_transl = false;
-        if (only_transl) {
-//             F_ext_EE_0[1] = 0;
-//             F_ext_EE_0[2] = 0;
+        if (only_transl_) {
+            if (only_x_) {
+                F_ext_EE_0[1] = 0;
+                F_ext_EE_0[2] = 0;
+            }
             F_ext_EE_0[3] = 0;
             F_ext_EE_0[4] = 0;
             F_ext_EE_0[5] = 0;
@@ -36,7 +100,11 @@ namespace trial_controller_velocity
         
         Eigen::Matrix<double,7,1> dq_max_safe;
         Eigen::Matrix<double,7,1> dq_min_safe;
-        Eigen::Matrix<double,7,1> B;
+        std::array<double, 42> J_vector = model_handle_->getZeroJacobian(franka::Frame::kEndEffector,state_handle_->getRobotState().q_d,state_handle_->getRobotState().F_T_EE,state_handle_->getRobotState().EE_T_K);
+        Eigen::Map<Eigen::Matrix<double, 6, 7>> J(J_vector.data());
+        Eigen::Matrix<double,7,1> B = Eigen::Matrix<double,7,1>::Zero();
+        Eigen::FullPivLU<Eigen::MatrixXd> lu(J);
+        B = lu.kernel();
         Eigen::Matrix<double,2,1> velocity_limits;
         for (size_t i = 0; i < 7; i++) {
             velocity_limits = setSafeVelocities(kMaxJointVelocity[i],kMaxJointAcceleration[i],kMaxJointJerk[i],dq_d[i],ddq_d[i]);
@@ -47,15 +115,14 @@ namespace trial_controller_velocity
         F_ext_EE_0_lowpass.setZero();
         Eigen::Matrix<double,7,1> dq_c;
         dq_c.setZero();
-        Eigen::Matrix<double,7,1> dq_c_opt;
-        dq_c_opt.setZero();
-        double u[8] = {10, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
-        qpOASES::real_t solution[2] = {1/mass_[0], 0.0};
-//         double u[OPTIMIZER4_NUM_DECISION_VARIABLES] = {mass_[0], 0.0, 0.0, 0,0,0,0,0};
-//         double u[OPTIMIZER5_NUM_DECISION_VARIABLES] = {mass_[0], 0.0};
+        Eigen::Matrix<double,7,1> dq_c_opt = Eigen::Matrix<double,7,1>::Zero();
+        qpOASES::real_t solution[8] = {1/m_tr_,0,0,0,0,0,0,0};
+//         double u[6] = {m_tr_, d_tr_, 0.0, 0.0, 0.0, 0.0};
         Eigen::Matrix<double,7,1> dq_c_lim;
         bool limits_violated = false;
-        bool only_damping = false;
+        for (size_t i=0;i<6;++i){
+            F_ext_EE_0_lowpass[i] = franka::lowpassFilter(0.001,F_ext_EE_0[i],F_ext_EE_0_lowpass_prev_[i],1);
+        }
         if (lockingFunction.locked_) {
             dq_c.setZero();
             for (size_t i = 0; i < 7; i++) {
@@ -69,18 +136,18 @@ namespace trial_controller_velocity
             }
         }
         else {
-            if (only_damping) {
+            if (only_damping_) {
                 Eigen::Matrix<double,6,1> v_c;
-                for (size_t i=0;i<6;++i){
-                    F_ext_EE_0_lowpass[i] = franka::lowpassFilter(0.001,F_ext_EE_0[i],F_ext_EE_0_lowpass_prev_[i],1);
-                }
-                F_ext_EE_0_lowpass_prev_ = F_ext_EE_0_lowpass;
                 for (size_t i = 0; i < 6; i++) {
-                    v_c[i] = F_ext_EE_0_lowpass[i]/damping[i];
+                    if (i < 3) {
+                        v_c[i] = F_ext_EE_0_lowpass[i]/d_tr_;
+                    }
+                    else {
+                        v_c[i] = F_ext_EE_0_lowpass[i]/d_rot_;
+                    }
                 }
                 Eigen::Matrix<double,7,6> J_pinv;
-                std::array<double, 42> J_vector = model_handle_->getZeroJacobian(franka::Frame::kEndEffector,state_handle_->getRobotState().q_d,state_handle_->getRobotState().F_T_EE,state_handle_->getRobotState().EE_T_K);
-                Eigen::Map<Eigen::Matrix<double, 6, 7>> J(J_vector.data());
+                
                 std::array<double, 49> B_vector = model_handle_->getMass();
                 Eigen::Map<Eigen::Matrix<double, 7, 7>> B(B_vector.data());
                 J_pinv = B.inverse()*J.transpose()*(J*B.inverse()*J.transpose()).inverse();
@@ -91,35 +158,9 @@ namespace trial_controller_velocity
                     }
                 }
                 if (limits_violated) {
-                    Eigen::Matrix<double,7,6> jj = J_pinv;
-                    Eigen::Matrix<double,6,1> ff = F_ext_EE_0_lowpass;
-                    Eigen::FullPivLU<Eigen::MatrixXd> lu(J);
-                    Eigen::MatrixXd J_null = lu.kernel();
-                    double p[OPTIMIZER2_NUM_PARAMETERS] = {jj(0,0),jj(0,1),jj(0,2),jj(0,3),jj(0,4),jj(0,5),     jj(1,0),jj(1,1),jj(1,2),jj(1,3),jj(1,4),jj(1,5),        jj(2,0),jj(2,1),jj(2,2),jj(2,3),jj(2,4),jj(2,5),        jj(3,0),jj(3,1),jj(3,2),jj(3,3),jj(3,4),jj(3,5),        jj(4,0),jj(4,1),jj(4,2),jj(4,3),jj(4,4),jj(4,5),        jj(5,0),jj(5,1),jj(5,2),jj(5,3),jj(5,4),jj(5,5),        jj(6,0),jj(6,1),jj(6,2),jj(6,3),jj(6,4),jj(6,5),
-                    ff[0], ff[1], ff[2],ff[3], ff[4], ff[5],
-                    J_null(0),J_null(1),J_null(2),J_null(3),J_null(4),J_null(5),J_null(6),
-                    dq_max_safe[0],dq_max_safe[1],dq_max_safe[2],dq_max_safe[3],dq_max_safe[4],dq_max_safe[5],dq_max_safe[6],
-                    dq_min_safe[0],dq_min_safe[1],dq_min_safe[2],dq_min_safe[3],dq_min_safe[4],dq_min_safe[5],dq_min_safe[6],
-                    10.0, 0.3, 1000.0, 0.001, 20.0, 10000.0
-                    };  // parameter
-                    /*double u[OPTIMIZER2_NUM_DECISION_VARIABLES] = {10.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0};*/  // initial guess
-                    
-                    optimizer2Cache *cache = optimizer2_new();
-                    optimizer2SolverStatus status = optimizer2_solve(cache, u, p, 0, 0);
-                    optimizer2_free(cache);
-                    Eigen::Matrix<double,6,1> delta;
-                    delta[0] = u[2];
-                    delta[1] = u[3];
-                    delta[2] = u[4];
-                    delta[3] = u[5];
-                    delta[4] = u[6];
-                    delta[5] = u[7];
-                    Eigen::Matrix<double,6,1> ff_d;
-                    ff_d.head(3) = ff.head(3)/u[0];
-                    ff_d.tail(3) = ff.tail(3)/0.3;
-                    dq_c_opt = jj*(ff_d+delta)+u[1]*J_null;
+                    std::cout << "limits_violated" << std::endl;
                     for (size_t i = 0; i < 7; i++) {
-                        dq_c_lim(i) = std::max(std::min(dq_c_opt[i], dq_max_safe[i]), dq_min_safe[i]);
+                        dq_c_lim(i) = std::max(std::min(dq_c[i], dq_max_safe[i]), dq_min_safe[i]);
                     }
                 }
                 else {
@@ -128,16 +169,29 @@ namespace trial_controller_velocity
             }
             else {
                 Eigen::Matrix<double,6,1> v_c;
-                for (size_t i=0;i<6;++i){
-                    F_ext_EE_0_lowpass[i] = franka::lowpassFilter(0.001,F_ext_EE_0[i],F_ext_EE_0_lowpass_prev_[i],1);
-                }
-                F_ext_EE_0_lowpass_prev_ = F_ext_EE_0_lowpass;
+                v_c.setZero();
                 std::array<double, 42> J_vector = model_handle_->getZeroJacobian(franka::Frame::kEndEffector,state_handle_->getRobotState().q_d,state_handle_->getRobotState().F_T_EE,state_handle_->getRobotState().EE_T_K);
                 Eigen::Map<Eigen::Matrix<double, 6, 7>> J(J_vector.data());
                 Eigen::Matrix<double,6,1> v_prev = J*dq_d;
-                for (size_t i = 0; i < 6; i++) {
-//                     v_c[i] = 1/(1+damping_[i]/mass_[i]*T_)*(v_prev[i]+F_ext_EE_0_lowpass[i]/mass_[i]*T_);
-                    v_c[i] = (1-damping_[i]/mass_[i]*T_)*v_prev[i]+F_ext_EE_0(i)*T_/mass_[i];
+                if (small_mass_) {
+                    for (size_t i = 0; i < 6; i++) {
+                        if (i < 3) {
+                            v_c[i] = v_prev[i]+1/m_tr_*(-d_tr_*v_prev[i]*T_+F_ext_EE_0_lowpass(i)*T_);
+                        }
+                        else {
+                            v_c[i] = F_ext_EE_0_lowpass[i]/d_rot_;
+                        }
+                    }
+                }
+                else {
+                    for (size_t i = 0; i < 6; i++) {
+                        if (i < 3) {
+                            v_c[i] = v_prev[i]+1/m_tr_*(-d_tr_*v_prev[i]*T_+F_ext_EE_0(i)*T_);
+                        }
+                        else {
+                            v_c[i] = v_prev[i]+1/m_rot_*(-d_rot_*v_prev[i]*T_+F_ext_EE_0(i)*T_);
+                        }
+                    }
                 }
                 std::array<double, 49> B_vector = model_handle_->getMass();
                 Eigen::Map<Eigen::Matrix<double, 7, 7>> B_mat(B_vector.data());
@@ -149,267 +203,81 @@ namespace trial_controller_velocity
                     }
                 }
                 if (limits_violated) {
-                    double k1 = 1;
-                    double k2 = 1;
-                    qpOASES::real_t H[2*2] = { 0,0,
-                        0,k2
-                    };
-                    qpOASES::real_t g[2] = { -k1,0 };
-//                     Eigen::DiagonalMatrix<double,8> H;
 //                     double k1 = 1;
 //                     double k2 = 1;
-//                     double k3 = 100;
-//                     H.diagonal() << k1,k2,k3,k3,k3,k3,k3,k3;
-                    double d_tr = damping[0];
-                    double T = T_;
-                    Eigen::FullPivLU<Eigen::MatrixXd> lu(J);
-                    B = lu.kernel();
-                    qpOASES::real_t A[7*2] = {J_pinv(0,0)*(F_ext_EE_0_lowpass(0)*T - T*d_tr*v_prev(0)) + J_pinv(0,1)*(F_ext_EE_0_lowpass(1)*T - T*d_tr*v_prev(1)) + J_pinv(0,2)*(F_ext_EE_0_lowpass(2)*T - T*d_tr*v_prev(2)),  B(0),
-                    J_pinv(1,0)*(F_ext_EE_0_lowpass(0)*T - T*d_tr*v_prev(0)) + J_pinv(1,1)*(F_ext_EE_0_lowpass(1)*T - T*d_tr*v_prev(1)) + J_pinv(1,2)*(F_ext_EE_0_lowpass(2)*T - T*d_tr*v_prev(2)),  B(1),
-                    J_pinv(2,0)*(F_ext_EE_0_lowpass(0)*T - T*d_tr*v_prev(0)) + J_pinv(2,1)*(F_ext_EE_0_lowpass(1)*T - T*d_tr*v_prev(1)) + J_pinv(2,2)*(F_ext_EE_0_lowpass(2)*T - T*d_tr*v_prev(2)),  B(2),
-                    J_pinv(3,0)*(F_ext_EE_0_lowpass(0)*T - T*d_tr*v_prev(0)) + J_pinv(3,1)*(F_ext_EE_0_lowpass(1)*T - T*d_tr*v_prev(1)) + J_pinv(3,2)*(F_ext_EE_0_lowpass(2)*T - T*d_tr*v_prev(2)),  B(3),
-                    J_pinv(4,0)*(F_ext_EE_0_lowpass(0)*T - T*d_tr*v_prev(0)) + J_pinv(4,1)*(F_ext_EE_0_lowpass(1)*T - T*d_tr*v_prev(1)) + J_pinv(4,2)*(F_ext_EE_0_lowpass(2)*T - T*d_tr*v_prev(2)),  B(4),
-                    J_pinv(5,0)*(F_ext_EE_0_lowpass(0)*T - T*d_tr*v_prev(0)) + J_pinv(5,1)*(F_ext_EE_0_lowpass(1)*T - T*d_tr*v_prev(1)) + J_pinv(5,2)*(F_ext_EE_0_lowpass(2)*T - T*d_tr*v_prev(2)),  B(5),
-                    J_pinv(6,0)*(F_ext_EE_0_lowpass(0)*T - T*d_tr*v_prev(0)) + J_pinv(6,1)*(F_ext_EE_0_lowpass(1)*T - T*d_tr*v_prev(1)) + J_pinv(6,2)*(F_ext_EE_0_lowpass(2)*T - T*d_tr*v_prev(2)),  B(6)};
-//                     A.setZero();
-//                     double d_tr = damping[0];
-//                     double T = T_;
-//                     A << J_pinv(0,0)*(F_ext_EE_0_lowpass(0)*T - T*d_tr*v_prev(0)) + J_pinv(0,1)*(F_ext_EE_0_lowpass(1)*T - T*d_tr*v_prev(1)) + J_pinv(0,2)*(F_ext_EE_0_lowpass(2)*T - T*d_tr*v_prev(2)),  B(0),  J_pinv(0,0),  J_pinv(0,1),  J_pinv(0,2),  J_pinv(0,3),  J_pinv(0,4),  J_pinv(0,5),
-//                     J_pinv(1,0)*(F_ext_EE_0_lowpass(0)*T - T*d_tr*v_prev(0)) + J_pinv(1,1)*(F_ext_EE_0_lowpass(1)*T - T*d_tr*v_prev(1)) + J_pinv(1,2)*(F_ext_EE_0_lowpass(2)*T - T*d_tr*v_prev(2)),  B(1),  J_pinv(1,0),  J_pinv(1,1),  J_pinv(1,2),  J_pinv(1,3),  J_pinv(1,4),  J_pinv(1,5),
-//                     J_pinv(2,0)*(F_ext_EE_0_lowpass(0)*T - T*d_tr*v_prev(0)) + J_pinv(2,1)*(F_ext_EE_0_lowpass(1)*T - T*d_tr*v_prev(1)) + J_pinv(2,2)*(F_ext_EE_0_lowpass(2)*T - T*d_tr*v_prev(2)),  B(2),  J_pinv(2,0),  J_pinv(2,1),  J_pinv(2,2),  J_pinv(2,3),  J_pinv(2,4),  J_pinv(2,5),
-//                     J_pinv(3,0)*(F_ext_EE_0_lowpass(0)*T - T*d_tr*v_prev(0)) + J_pinv(3,1)*(F_ext_EE_0_lowpass(1)*T - T*d_tr*v_prev(1)) + J_pinv(3,2)*(F_ext_EE_0_lowpass(2)*T - T*d_tr*v_prev(2)),  B(3),  J_pinv(3,0),  J_pinv(3,1),  J_pinv(3,2),  J_pinv(3,3),  J_pinv(3,4),  J_pinv(3,5),
-//                     J_pinv(4,0)*(F_ext_EE_0_lowpass(0)*T - T*d_tr*v_prev(0)) + J_pinv(4,1)*(F_ext_EE_0_lowpass(1)*T - T*d_tr*v_prev(1)) + J_pinv(4,2)*(F_ext_EE_0_lowpass(2)*T - T*d_tr*v_prev(2)),  B(4),  J_pinv(4,0),  J_pinv(4,1),  J_pinv(4,2),  J_pinv(4,3),  J_pinv(4,4),  J_pinv(4,5),
-//                     J_pinv(5,0)*(F_ext_EE_0_lowpass(0)*T - T*d_tr*v_prev(0)) + J_pinv(5,1)*(F_ext_EE_0_lowpass(1)*T - T*d_tr*v_prev(1)) + J_pinv(5,2)*(F_ext_EE_0_lowpass(2)*T - T*d_tr*v_prev(2)),  B(5),  J_pinv(5,0),  J_pinv(5,1),  J_pinv(5,2),  J_pinv(5,3),  J_pinv(5,4),  J_pinv(5,5),
-//                     J_pinv(6,0)*(F_ext_EE_0_lowpass(0)*T - T*d_tr*v_prev(0)) + J_pinv(6,1)*(F_ext_EE_0_lowpass(1)*T - T*d_tr*v_prev(1)) + J_pinv(6,2)*(F_ext_EE_0_lowpass(2)*T - T*d_tr*v_prev(2)),  B(6),  J_pinv(6,0),  J_pinv(6,1),  J_pinv(6,2),  J_pinv(6,3),  J_pinv(6,4),  J_pinv(6,5);
-                    
-                    double d_rot = damping[3];
-                    double m_rot = mass_[3];
-                    
-                    qpOASES::real_t ubA[7] = {dq_max_safe(0) - J_pinv(0,0)*v_prev(0) - J_pinv(0,1)*v_prev(1) - J_pinv(0,2)*v_prev(2) - J_pinv(0,3)*(v_prev(3) + (F_ext_EE_0_lowpass(3)*T - T*d_rot*v_prev(3))/m_rot) - J_pinv(0,4)*(v_prev(4) + (F_ext_EE_0_lowpass(4)*T - T*d_rot*v_prev(4))/m_rot) - J_pinv(0,5)*(v_prev(5) + (F_ext_EE_0_lowpass(5)*T - T*d_rot*v_prev(5))/m_rot),
-                    dq_max_safe(1) - J_pinv(1,0)*v_prev(0) - J_pinv(1,1)*v_prev(1) - J_pinv(1,2)*v_prev(2) - J_pinv(1,3)*(v_prev(3) + (F_ext_EE_0_lowpass(3)*T - T*d_rot*v_prev(3))/m_rot) - J_pinv(1,4)*(v_prev(4) + (F_ext_EE_0_lowpass(4)*T - T*d_rot*v_prev(4))/m_rot) - J_pinv(1,5)*(v_prev(5) + (F_ext_EE_0_lowpass(5)*T - T*d_rot*v_prev(5))/m_rot),
-                    dq_max_safe(2) - J_pinv(2,0)*v_prev(0) - J_pinv(2,1)*v_prev(1) - J_pinv(2,2)*v_prev(2) - J_pinv(2,3)*(v_prev(3) + (F_ext_EE_0_lowpass(3)*T - T*d_rot*v_prev(3))/m_rot) - J_pinv(2,4)*(v_prev(4) + (F_ext_EE_0_lowpass(4)*T - T*d_rot*v_prev(4))/m_rot) - J_pinv(2,5)*(v_prev(5) + (F_ext_EE_0_lowpass(5)*T - T*d_rot*v_prev(5))/m_rot),
-                    dq_max_safe(3) - J_pinv(3,0)*v_prev(0) - J_pinv(3,1)*v_prev(1) - J_pinv(3,2)*v_prev(2) - J_pinv(3,3)*(v_prev(3) + (F_ext_EE_0_lowpass(3)*T - T*d_rot*v_prev(3))/m_rot) - J_pinv(3,4)*(v_prev(4) + (F_ext_EE_0_lowpass(4)*T - T*d_rot*v_prev(4))/m_rot) - J_pinv(3,5)*(v_prev(5) + (F_ext_EE_0_lowpass(5)*T - T*d_rot*v_prev(5))/m_rot),
-                    dq_max_safe(4) - J_pinv(4,0)*v_prev(0) - J_pinv(4,1)*v_prev(1) - J_pinv(4,2)*v_prev(2) - J_pinv(4,3)*(v_prev(3) + (F_ext_EE_0_lowpass(3)*T - T*d_rot*v_prev(3))/m_rot) - J_pinv(4,4)*(v_prev(4) + (F_ext_EE_0_lowpass(4)*T - T*d_rot*v_prev(4))/m_rot) - J_pinv(4,5)*(v_prev(5) + (F_ext_EE_0_lowpass(5)*T - T*d_rot*v_prev(5))/m_rot),
-                    dq_max_safe(5) - J_pinv(5,0)*v_prev(0) - J_pinv(5,1)*v_prev(1) - J_pinv(5,2)*v_prev(2) - J_pinv(5,3)*(v_prev(3) + (F_ext_EE_0_lowpass(3)*T - T*d_rot*v_prev(3))/m_rot) - J_pinv(5,4)*(v_prev(4) + (F_ext_EE_0_lowpass(4)*T - T*d_rot*v_prev(4))/m_rot) - J_pinv(5,5)*(v_prev(5) + (F_ext_EE_0_lowpass(5)*T - T*d_rot*v_prev(5))/m_rot),
-                    dq_max_safe(6) - J_pinv(6,0)*v_prev(0) - J_pinv(6,1)*v_prev(1) - J_pinv(6,2)*v_prev(2) - J_pinv(6,3)*(v_prev(3) + (F_ext_EE_0_lowpass(3)*T - T*d_rot*v_prev(3))/m_rot) - J_pinv(6,4)*(v_prev(4) + (F_ext_EE_0_lowpass(4)*T - T*d_rot*v_prev(4))/m_rot) - J_pinv(6,5)*(v_prev(5) + (F_ext_EE_0_lowpass(5)*T - T*d_rot*v_prev(5))/m_rot)};
-//                     ubA.setZero();
-//                     ubA << dq_max_safe(0) - J_pinv(0,0)*v_prev(0) - J_pinv(0,1)*v_prev(1) - J_pinv(0,2)*v_prev(2) - J_pinv(0,3)*(v_prev(3) + (F_ext_EE_0_lowpass(3)*T - T*d_rot*v_prev(3))/m_rot) - J_pinv(0,4)*(v_prev(4) + (F_ext_EE_0_lowpass(4)*T - T*d_rot*v_prev(4))/m_rot) - J_pinv(0,5)*(v_prev(5) + (F_ext_EE_0_lowpass(5)*T - T*d_rot*v_prev(5))/m_rot),
-//                     dq_max_safe(1) - J_pinv(1,0)*v_prev(0) - J_pinv(1,1)*v_prev(1) - J_pinv(1,2)*v_prev(2) - J_pinv(1,3)*(v_prev(3) + (F_ext_EE_0_lowpass(3)*T - T*d_rot*v_prev(3))/m_rot) - J_pinv(1,4)*(v_prev(4) + (F_ext_EE_0_lowpass(4)*T - T*d_rot*v_prev(4))/m_rot) - J_pinv(1,5)*(v_prev(5) + (F_ext_EE_0_lowpass(5)*T - T*d_rot*v_prev(5))/m_rot),
-//                     dq_max_safe(2) - J_pinv(2,0)*v_prev(0) - J_pinv(2,1)*v_prev(1) - J_pinv(2,2)*v_prev(2) - J_pinv(2,3)*(v_prev(3) + (F_ext_EE_0_lowpass(3)*T - T*d_rot*v_prev(3))/m_rot) - J_pinv(2,4)*(v_prev(4) + (F_ext_EE_0_lowpass(4)*T - T*d_rot*v_prev(4))/m_rot) - J_pinv(2,5)*(v_prev(5) + (F_ext_EE_0_lowpass(5)*T - T*d_rot*v_prev(5))/m_rot),
-//                     dq_max_safe(3) - J_pinv(3,0)*v_prev(0) - J_pinv(3,1)*v_prev(1) - J_pinv(3,2)*v_prev(2) - J_pinv(3,3)*(v_prev(3) + (F_ext_EE_0_lowpass(3)*T - T*d_rot*v_prev(3))/m_rot) - J_pinv(3,4)*(v_prev(4) + (F_ext_EE_0_lowpass(4)*T - T*d_rot*v_prev(4))/m_rot) - J_pinv(3,5)*(v_prev(5) + (F_ext_EE_0_lowpass(5)*T - T*d_rot*v_prev(5))/m_rot),
-//                     dq_max_safe(4) - J_pinv(4,0)*v_prev(0) - J_pinv(4,1)*v_prev(1) - J_pinv(4,2)*v_prev(2) - J_pinv(4,3)*(v_prev(3) + (F_ext_EE_0_lowpass(3)*T - T*d_rot*v_prev(3))/m_rot) - J_pinv(4,4)*(v_prev(4) + (F_ext_EE_0_lowpass(4)*T - T*d_rot*v_prev(4))/m_rot) - J_pinv(4,5)*(v_prev(5) + (F_ext_EE_0_lowpass(5)*T - T*d_rot*v_prev(5))/m_rot),
-//                     dq_max_safe(5) - J_pinv(5,0)*v_prev(0) - J_pinv(5,1)*v_prev(1) - J_pinv(5,2)*v_prev(2) - J_pinv(5,3)*(v_prev(3) + (F_ext_EE_0_lowpass(3)*T - T*d_rot*v_prev(3))/m_rot) - J_pinv(5,4)*(v_prev(4) + (F_ext_EE_0_lowpass(4)*T - T*d_rot*v_prev(4))/m_rot) - J_pinv(5,5)*(v_prev(5) + (F_ext_EE_0_lowpass(5)*T - T*d_rot*v_prev(5))/m_rot),
-//                     dq_max_safe(6) - J_pinv(6,0)*v_prev(0) - J_pinv(6,1)*v_prev(1) - J_pinv(6,2)*v_prev(2) - J_pinv(6,3)*(v_prev(3) + (F_ext_EE_0_lowpass(3)*T - T*d_rot*v_prev(3))/m_rot) - J_pinv(6,4)*(v_prev(4) + (F_ext_EE_0_lowpass(4)*T - T*d_rot*v_prev(4))/m_rot) - J_pinv(6,5)*(v_prev(5) + (F_ext_EE_0_lowpass(5)*T - T*d_rot*v_prev(5))/m_rot);
-                    
-                    qpOASES::real_t lbA[7] = {dq_min_safe(0) - J_pinv(0,0)*v_prev(0) - J_pinv(0,1)*v_prev(1) - J_pinv(0,2)*v_prev(2) - J_pinv(0,3)*(v_prev(3) + (F_ext_EE_0_lowpass(3)*T - T*d_rot*v_prev(3))/m_rot) - J_pinv(0,4)*(v_prev(4) + (F_ext_EE_0_lowpass(4)*T - T*d_rot*v_prev(4))/m_rot) - J_pinv(0,5)*(v_prev(5) + (F_ext_EE_0_lowpass(5)*T - T*d_rot*v_prev(5))/m_rot),
-                    dq_min_safe(1) - J_pinv(1,0)*v_prev(0) - J_pinv(1,1)*v_prev(1) - J_pinv(1,2)*v_prev(2) - J_pinv(1,3)*(v_prev(3) + (F_ext_EE_0_lowpass(3)*T - T*d_rot*v_prev(3))/m_rot) - J_pinv(1,4)*(v_prev(4) + (F_ext_EE_0_lowpass(4)*T - T*d_rot*v_prev(4))/m_rot) - J_pinv(1,5)*(v_prev(5) + (F_ext_EE_0_lowpass(5)*T - T*d_rot*v_prev(5))/m_rot),
-                    dq_min_safe(2) - J_pinv(2,0)*v_prev(0) - J_pinv(2,1)*v_prev(1) - J_pinv(2,2)*v_prev(2) - J_pinv(2,3)*(v_prev(3) + (F_ext_EE_0_lowpass(3)*T - T*d_rot*v_prev(3))/m_rot) - J_pinv(2,4)*(v_prev(4) + (F_ext_EE_0_lowpass(4)*T - T*d_rot*v_prev(4))/m_rot) - J_pinv(2,5)*(v_prev(5) + (F_ext_EE_0_lowpass(5)*T - T*d_rot*v_prev(5))/m_rot),
-                    dq_min_safe(3) - J_pinv(3,0)*v_prev(0) - J_pinv(3,1)*v_prev(1) - J_pinv(3,2)*v_prev(2) - J_pinv(3,3)*(v_prev(3) + (F_ext_EE_0_lowpass(3)*T - T*d_rot*v_prev(3))/m_rot) - J_pinv(3,4)*(v_prev(4) + (F_ext_EE_0_lowpass(4)*T - T*d_rot*v_prev(4))/m_rot) - J_pinv(3,5)*(v_prev(5) + (F_ext_EE_0_lowpass(5)*T - T*d_rot*v_prev(5))/m_rot),
-                    dq_min_safe(4) - J_pinv(4,0)*v_prev(0) - J_pinv(4,1)*v_prev(1) - J_pinv(4,2)*v_prev(2) - J_pinv(4,3)*(v_prev(3) + (F_ext_EE_0_lowpass(3)*T - T*d_rot*v_prev(3))/m_rot) - J_pinv(4,4)*(v_prev(4) + (F_ext_EE_0_lowpass(4)*T - T*d_rot*v_prev(4))/m_rot) - J_pinv(4,5)*(v_prev(5) + (F_ext_EE_0_lowpass(5)*T - T*d_rot*v_prev(5))/m_rot),
-                    dq_min_safe(5) - J_pinv(5,0)*v_prev(0) - J_pinv(5,1)*v_prev(1) - J_pinv(5,2)*v_prev(2) - J_pinv(5,3)*(v_prev(3) + (F_ext_EE_0_lowpass(3)*T - T*d_rot*v_prev(3))/m_rot) - J_pinv(5,4)*(v_prev(4) + (F_ext_EE_0_lowpass(4)*T - T*d_rot*v_prev(4))/m_rot) - J_pinv(5,5)*(v_prev(5) + (F_ext_EE_0_lowpass(5)*T - T*d_rot*v_prev(5))/m_rot),
-                    dq_min_safe(6) - J_pinv(6,0)*v_prev(0) - J_pinv(6,1)*v_prev(1) - J_pinv(6,2)*v_prev(2) - J_pinv(6,3)*(v_prev(3) + (F_ext_EE_0_lowpass(3)*T - T*d_rot*v_prev(3))/m_rot) - J_pinv(6,4)*(v_prev(4) + (F_ext_EE_0_lowpass(4)*T - T*d_rot*v_prev(4))/m_rot) - J_pinv(6,5)*(v_prev(5) + (F_ext_EE_0_lowpass(5)*T - T*d_rot*v_prev(5))/m_rot)};
-//                     lbA.setZero();
-//                     lbA << dq_min_safe(0) - J_pinv(0,0)*v_prev(0) - J_pinv(0,1)*v_prev(1) - J_pinv(0,2)*v_prev(2) - J_pinv(0,3)*(v_prev(3) + (F_ext_EE_0_lowpass(3)*T - T*d_rot*v_prev(3))/m_rot) - J_pinv(0,4)*(v_prev(4) + (F_ext_EE_0_lowpass(4)*T - T*d_rot*v_prev(4))/m_rot) - J_pinv(0,5)*(v_prev(5) + (F_ext_EE_0_lowpass(5)*T - T*d_rot*v_prev(5))/m_rot),
-//                     dq_min_safe(1) - J_pinv(1,0)*v_prev(0) - J_pinv(1,1)*v_prev(1) - J_pinv(1,2)*v_prev(2) - J_pinv(1,3)*(v_prev(3) + (F_ext_EE_0_lowpass(3)*T - T*d_rot*v_prev(3))/m_rot) - J_pinv(1,4)*(v_prev(4) + (F_ext_EE_0_lowpass(4)*T - T*d_rot*v_prev(4))/m_rot) - J_pinv(1,5)*(v_prev(5) + (F_ext_EE_0_lowpass(5)*T - T*d_rot*v_prev(5))/m_rot),
-//                     dq_min_safe(2) - J_pinv(2,0)*v_prev(0) - J_pinv(2,1)*v_prev(1) - J_pinv(2,2)*v_prev(2) - J_pinv(2,3)*(v_prev(3) + (F_ext_EE_0_lowpass(3)*T - T*d_rot*v_prev(3))/m_rot) - J_pinv(2,4)*(v_prev(4) + (F_ext_EE_0_lowpass(4)*T - T*d_rot*v_prev(4))/m_rot) - J_pinv(2,5)*(v_prev(5) + (F_ext_EE_0_lowpass(5)*T - T*d_rot*v_prev(5))/m_rot),
-//                     dq_min_safe(3) - J_pinv(3,0)*v_prev(0) - J_pinv(3,1)*v_prev(1) - J_pinv(3,2)*v_prev(2) - J_pinv(3,3)*(v_prev(3) + (F_ext_EE_0_lowpass(3)*T - T*d_rot*v_prev(3))/m_rot) - J_pinv(3,4)*(v_prev(4) + (F_ext_EE_0_lowpass(4)*T - T*d_rot*v_prev(4))/m_rot) - J_pinv(3,5)*(v_prev(5) + (F_ext_EE_0_lowpass(5)*T - T*d_rot*v_prev(5))/m_rot),
-//                     dq_min_safe(4) - J_pinv(4,0)*v_prev(0) - J_pinv(4,1)*v_prev(1) - J_pinv(4,2)*v_prev(2) - J_pinv(4,3)*(v_prev(3) + (F_ext_EE_0_lowpass(3)*T - T*d_rot*v_prev(3))/m_rot) - J_pinv(4,4)*(v_prev(4) + (F_ext_EE_0_lowpass(4)*T - T*d_rot*v_prev(4))/m_rot) - J_pinv(4,5)*(v_prev(5) + (F_ext_EE_0_lowpass(5)*T - T*d_rot*v_prev(5))/m_rot),
-//                     dq_min_safe(5) - J_pinv(5,0)*v_prev(0) - J_pinv(5,1)*v_prev(1) - J_pinv(5,2)*v_prev(2) - J_pinv(5,3)*(v_prev(3) + (F_ext_EE_0_lowpass(3)*T - T*d_rot*v_prev(3))/m_rot) - J_pinv(5,4)*(v_prev(4) + (F_ext_EE_0_lowpass(4)*T - T*d_rot*v_prev(4))/m_rot) - J_pinv(5,5)*(v_prev(5) + (F_ext_EE_0_lowpass(5)*T - T*d_rot*v_prev(5))/m_rot),
-//                     dq_min_safe(6) - J_pinv(6,0)*v_prev(0) - J_pinv(6,1)*v_prev(1) - J_pinv(6,2)*v_prev(2) - J_pinv(6,3)*(v_prev(3) + (F_ext_EE_0_lowpass(3)*T - T*d_rot*v_prev(3))/m_rot) - J_pinv(6,4)*(v_prev(4) + (F_ext_EE_0_lowpass(4)*T - T*d_rot*v_prev(4))/m_rot) - J_pinv(6,5)*(v_prev(5) + (F_ext_EE_0_lowpass(5)*T - T*d_rot*v_prev(5))/m_rot);
-                    
-                    qpOASES::real_t lb[2] = {1/20,-qpOASES::INFTY};
-                    qpOASES::real_t ub[2] = {1/mass_[0],qpOASES::INFTY};
-                    
-                    int nWSR = 100;
-                    qpOASES::SQProblem opt_problem( 2,7 );
-//                     qpOASES::returnValue return_value = opt_problem.init( H,g,A,lb,ub,lbA,ubA, nWSR,0,solution );
-// //                     std::cout << qpOASES::getSimpleStatus(return_value) << std::endl;
-//                     
-//                     
-//                     opt_problem.getPrimalSolution(solution);
-//                     if (robot_state.current_errors) {
-//                         error = true;
+//                     double k3 = 1000;
+//                     qpOASES::real_t H[8*8];
+//                     for (size_t i = 0; i < 8; i++) {
+//                         for (size_t j = 0; j < 8; j++) {
+//                             if (i==j) {
+//                                 if (i == 1) {
+//                                     H[i*8+j] = k2;
+//                                 }
+//                                 else if (i > 1) {
+//                                     H[i*8+j] = k3;
+//                                 }
+//                             }
+//                             else {
+//                                 H[i*8+j] = 0;
+//                             }
+//                         }
 //                     }
-//                         
-//                     if (!error) {
-//                         std::cout << qpOASES::getSimpleStatus(return_value) << std::endl << 1/solution[0] << std::endl << solution[1] << std::endl << std::endl;
+//                     qpOASES::real_t g[8] = {k1,0,0,0,0,0,0,0};
+//                     Eigen::Matrix<double,7,8> A_eigen = Eigen::Matrix<double,7,8>::Zero();
+//                     A_eigen.block(0,0,7,1) = J_pinv.block(0,0,7,3)*(d_tr_*v_prev.head(3)*T_-F_ext_EE_0_lowpass.head(3)*T_);
+//                     A_eigen.block(0,1,7,1) = b;
+//                     A_eigen.block(0,2,7,6) = J_pinv;
+//                     qpOASES::real_t A[7*8];
+//                     for (size_t i = 0; i < 7; i++) {
+//                         for (size_t j = 0; j < 8; j++) {
+//                             A[i*8+j] = A_eigen(i,j);
+//                         }
 //                     }
-//                     
-//                     double m_tr = 1/solution[0];
-// //                     std::cout << m_tr << std::endl;
-//                     double a = solution[1];
-//                     Eigen::Matrix<double,6,1> v_c_lim;
-//                     v_c_lim.setZero();
-//                     v_c_lim.head(3) = (1-d_tr/m_tr*T_)*v_prev.head(3)+F_ext_EE_0_lowpass.head(3)*T_/m_tr;
-//                     v_c_lim.tail(3) = (1-d_rot/m_rot*T_)*v_prev.tail(3)+F_ext_EE_0_lowpass.tail(3)*T_/m_rot;
-//                     dq_c_lim = J_pinv*(v_c_lim)+B*a;
-                    
-                    
-                    
-//                     double k1 = 1;
-//                     double k2 = 1;
-//                     double k3 = 10000; 
-//                     qpOASES::real_t H[8*8] = { 0,0,0,0,0,0,0,0,
-//                         0,k2,0,0,0,0,0,0,
-//                         0,0,k3,0,0,0,0,0,
-//                         0,0,0,k3,0,0,0,0,
-//                         0,0,0,0,k3,0,0,0,
-//                         0,0,0,0,0,k3,0,0,
-//                         0,0,0,0,0,0,k3,0,
-//                         0,0,0,0,0,0,0,k3
-//                     };
-//                     qpOASES::real_t g[8] = { -k1,0,0,0,0,0,0,0 };
-// //                     Eigen::DiagonalMatrix<double,8> H;
-// //                     double k1 = 1;
-// //                     double k2 = 1;
-// //                     double k3 = 100;
-// //                     H.diagonal() << k1,k2,k3,k3,k3,k3,k3,k3;
-//                     double d_tr = damping[0];
-//                     double T = T_;
-//                     Eigen::FullPivLU<Eigen::MatrixXd> lu(J);
-//                     Eigen::MatrixXd B = lu.kernel();
-//                     qpOASES::real_t A[7*8] = {J_pinv(0,0)*(F_ext_EE_0_lowpass(0)*T - T*d_tr*v_prev(0)) + J_pinv(0,1)*(F_ext_EE_0_lowpass(1)*T - T*d_tr*v_prev(1)) + J_pinv(0,2)*(F_ext_EE_0_lowpass(2)*T - T*d_tr*v_prev(2)),  B(0),  J_pinv(0,0),  J_pinv(0,1),  J_pinv(0,2),  J_pinv(0,3),  J_pinv(0,4),  J_pinv(0,5),
-//                     J_pinv(1,0)*(F_ext_EE_0_lowpass(0)*T - T*d_tr*v_prev(0)) + J_pinv(1,1)*(F_ext_EE_0_lowpass(1)*T - T*d_tr*v_prev(1)) + J_pinv(1,2)*(F_ext_EE_0_lowpass(2)*T - T*d_tr*v_prev(2)),  B(1),  J_pinv(1,0),  J_pinv(1,1),  J_pinv(1,2),  J_pinv(1,3),  J_pinv(1,4),  J_pinv(1,5),
-//                     J_pinv(2,0)*(F_ext_EE_0_lowpass(0)*T - T*d_tr*v_prev(0)) + J_pinv(2,1)*(F_ext_EE_0_lowpass(1)*T - T*d_tr*v_prev(1)) + J_pinv(2,2)*(F_ext_EE_0_lowpass(2)*T - T*d_tr*v_prev(2)),  B(2),  J_pinv(2,0),  J_pinv(2,1),  J_pinv(2,2),  J_pinv(2,3),  J_pinv(2,4),  J_pinv(2,5),
-//                     J_pinv(3,0)*(F_ext_EE_0_lowpass(0)*T - T*d_tr*v_prev(0)) + J_pinv(3,1)*(F_ext_EE_0_lowpass(1)*T - T*d_tr*v_prev(1)) + J_pinv(3,2)*(F_ext_EE_0_lowpass(2)*T - T*d_tr*v_prev(2)),  B(3),  J_pinv(3,0),  J_pinv(3,1),  J_pinv(3,2),  J_pinv(3,3),  J_pinv(3,4),  J_pinv(3,5),
-//                     J_pinv(4,0)*(F_ext_EE_0_lowpass(0)*T - T*d_tr*v_prev(0)) + J_pinv(4,1)*(F_ext_EE_0_lowpass(1)*T - T*d_tr*v_prev(1)) + J_pinv(4,2)*(F_ext_EE_0_lowpass(2)*T - T*d_tr*v_prev(2)),  B(4),  J_pinv(4,0),  J_pinv(4,1),  J_pinv(4,2),  J_pinv(4,3),  J_pinv(4,4),  J_pinv(4,5),
-//                     J_pinv(5,0)*(F_ext_EE_0_lowpass(0)*T - T*d_tr*v_prev(0)) + J_pinv(5,1)*(F_ext_EE_0_lowpass(1)*T - T*d_tr*v_prev(1)) + J_pinv(5,2)*(F_ext_EE_0_lowpass(2)*T - T*d_tr*v_prev(2)),  B(5),  J_pinv(5,0),  J_pinv(5,1),  J_pinv(5,2),  J_pinv(5,3),  J_pinv(5,4),  J_pinv(5,5),
-//                     J_pinv(6,0)*(F_ext_EE_0_lowpass(0)*T - T*d_tr*v_prev(0)) + J_pinv(6,1)*(F_ext_EE_0_lowpass(1)*T - T*d_tr*v_prev(1)) + J_pinv(6,2)*(F_ext_EE_0_lowpass(2)*T - T*d_tr*v_prev(2)),  B(6),  J_pinv(6,0),  J_pinv(6,1),  J_pinv(6,2),  J_pinv(6,3),  J_pinv(6,4),  J_pinv(6,5)};
-// //                     A.setZero();
-// //                     double d_tr = damping[0];
-// //                     double T = T_;
-// //                     A << J_pinv(0,0)*(F_ext_EE_0_lowpass(0)*T - T*d_tr*v_prev(0)) + J_pinv(0,1)*(F_ext_EE_0_lowpass(1)*T - T*d_tr*v_prev(1)) + J_pinv(0,2)*(F_ext_EE_0_lowpass(2)*T - T*d_tr*v_prev(2)),  B(0),  J_pinv(0,0),  J_pinv(0,1),  J_pinv(0,2),  J_pinv(0,3),  J_pinv(0,4),  J_pinv(0,5),
-// //                     J_pinv(1,0)*(F_ext_EE_0_lowpass(0)*T - T*d_tr*v_prev(0)) + J_pinv(1,1)*(F_ext_EE_0_lowpass(1)*T - T*d_tr*v_prev(1)) + J_pinv(1,2)*(F_ext_EE_0_lowpass(2)*T - T*d_tr*v_prev(2)),  B(1),  J_pinv(1,0),  J_pinv(1,1),  J_pinv(1,2),  J_pinv(1,3),  J_pinv(1,4),  J_pinv(1,5),
-// //                     J_pinv(2,0)*(F_ext_EE_0_lowpass(0)*T - T*d_tr*v_prev(0)) + J_pinv(2,1)*(F_ext_EE_0_lowpass(1)*T - T*d_tr*v_prev(1)) + J_pinv(2,2)*(F_ext_EE_0_lowpass(2)*T - T*d_tr*v_prev(2)),  B(2),  J_pinv(2,0),  J_pinv(2,1),  J_pinv(2,2),  J_pinv(2,3),  J_pinv(2,4),  J_pinv(2,5),
-// //                     J_pinv(3,0)*(F_ext_EE_0_lowpass(0)*T - T*d_tr*v_prev(0)) + J_pinv(3,1)*(F_ext_EE_0_lowpass(1)*T - T*d_tr*v_prev(1)) + J_pinv(3,2)*(F_ext_EE_0_lowpass(2)*T - T*d_tr*v_prev(2)),  B(3),  J_pinv(3,0),  J_pinv(3,1),  J_pinv(3,2),  J_pinv(3,3),  J_pinv(3,4),  J_pinv(3,5),
-// //                     J_pinv(4,0)*(F_ext_EE_0_lowpass(0)*T - T*d_tr*v_prev(0)) + J_pinv(4,1)*(F_ext_EE_0_lowpass(1)*T - T*d_tr*v_prev(1)) + J_pinv(4,2)*(F_ext_EE_0_lowpass(2)*T - T*d_tr*v_prev(2)),  B(4),  J_pinv(4,0),  J_pinv(4,1),  J_pinv(4,2),  J_pinv(4,3),  J_pinv(4,4),  J_pinv(4,5),
-// //                     J_pinv(5,0)*(F_ext_EE_0_lowpass(0)*T - T*d_tr*v_prev(0)) + J_pinv(5,1)*(F_ext_EE_0_lowpass(1)*T - T*d_tr*v_prev(1)) + J_pinv(5,2)*(F_ext_EE_0_lowpass(2)*T - T*d_tr*v_prev(2)),  B(5),  J_pinv(5,0),  J_pinv(5,1),  J_pinv(5,2),  J_pinv(5,3),  J_pinv(5,4),  J_pinv(5,5),
-// //                     J_pinv(6,0)*(F_ext_EE_0_lowpass(0)*T - T*d_tr*v_prev(0)) + J_pinv(6,1)*(F_ext_EE_0_lowpass(1)*T - T*d_tr*v_prev(1)) + J_pinv(6,2)*(F_ext_EE_0_lowpass(2)*T - T*d_tr*v_prev(2)),  B(6),  J_pinv(6,0),  J_pinv(6,1),  J_pinv(6,2),  J_pinv(6,3),  J_pinv(6,4),  J_pinv(6,5);
-//                     
-//                     double d_rot = damping[3];
-//                     double m_rot = mass_[3];
-//                     
-//                     qpOASES::real_t ubA[7] = {dq_max_safe(0) - J_pinv(0,0)*v_prev(0) - J_pinv(0,1)*v_prev(1) - J_pinv(0,2)*v_prev(2) - J_pinv(0,3)*(v_prev(3) + (F_ext_EE_0_lowpass(3)*T - T*d_rot*v_prev(3))/m_rot) - J_pinv(0,4)*(v_prev(4) + (F_ext_EE_0_lowpass(4)*T - T*d_rot*v_prev(4))/m_rot) - J_pinv(0,5)*(v_prev(5) + (F_ext_EE_0_lowpass(5)*T - T*d_rot*v_prev(5))/m_rot),
-//                     dq_max_safe(1) - J_pinv(1,0)*v_prev(0) - J_pinv(1,1)*v_prev(1) - J_pinv(1,2)*v_prev(2) - J_pinv(1,3)*(v_prev(3) + (F_ext_EE_0_lowpass(3)*T - T*d_rot*v_prev(3))/m_rot) - J_pinv(1,4)*(v_prev(4) + (F_ext_EE_0_lowpass(4)*T - T*d_rot*v_prev(4))/m_rot) - J_pinv(1,5)*(v_prev(5) + (F_ext_EE_0_lowpass(5)*T - T*d_rot*v_prev(5))/m_rot),
-//                     dq_max_safe(2) - J_pinv(2,0)*v_prev(0) - J_pinv(2,1)*v_prev(1) - J_pinv(2,2)*v_prev(2) - J_pinv(2,3)*(v_prev(3) + (F_ext_EE_0_lowpass(3)*T - T*d_rot*v_prev(3))/m_rot) - J_pinv(2,4)*(v_prev(4) + (F_ext_EE_0_lowpass(4)*T - T*d_rot*v_prev(4))/m_rot) - J_pinv(2,5)*(v_prev(5) + (F_ext_EE_0_lowpass(5)*T - T*d_rot*v_prev(5))/m_rot),
-//                     dq_max_safe(3) - J_pinv(3,0)*v_prev(0) - J_pinv(3,1)*v_prev(1) - J_pinv(3,2)*v_prev(2) - J_pinv(3,3)*(v_prev(3) + (F_ext_EE_0_lowpass(3)*T - T*d_rot*v_prev(3))/m_rot) - J_pinv(3,4)*(v_prev(4) + (F_ext_EE_0_lowpass(4)*T - T*d_rot*v_prev(4))/m_rot) - J_pinv(3,5)*(v_prev(5) + (F_ext_EE_0_lowpass(5)*T - T*d_rot*v_prev(5))/m_rot),
-//                     dq_max_safe(4) - J_pinv(4,0)*v_prev(0) - J_pinv(4,1)*v_prev(1) - J_pinv(4,2)*v_prev(2) - J_pinv(4,3)*(v_prev(3) + (F_ext_EE_0_lowpass(3)*T - T*d_rot*v_prev(3))/m_rot) - J_pinv(4,4)*(v_prev(4) + (F_ext_EE_0_lowpass(4)*T - T*d_rot*v_prev(4))/m_rot) - J_pinv(4,5)*(v_prev(5) + (F_ext_EE_0_lowpass(5)*T - T*d_rot*v_prev(5))/m_rot),
-//                     dq_max_safe(5) - J_pinv(5,0)*v_prev(0) - J_pinv(5,1)*v_prev(1) - J_pinv(5,2)*v_prev(2) - J_pinv(5,3)*(v_prev(3) + (F_ext_EE_0_lowpass(3)*T - T*d_rot*v_prev(3))/m_rot) - J_pinv(5,4)*(v_prev(4) + (F_ext_EE_0_lowpass(4)*T - T*d_rot*v_prev(4))/m_rot) - J_pinv(5,5)*(v_prev(5) + (F_ext_EE_0_lowpass(5)*T - T*d_rot*v_prev(5))/m_rot),
-//                     dq_max_safe(6) - J_pinv(6,0)*v_prev(0) - J_pinv(6,1)*v_prev(1) - J_pinv(6,2)*v_prev(2) - J_pinv(6,3)*(v_prev(3) + (F_ext_EE_0_lowpass(3)*T - T*d_rot*v_prev(3))/m_rot) - J_pinv(6,4)*(v_prev(4) + (F_ext_EE_0_lowpass(4)*T - T*d_rot*v_prev(4))/m_rot) - J_pinv(6,5)*(v_prev(5) + (F_ext_EE_0_lowpass(5)*T - T*d_rot*v_prev(5))/m_rot)};
-// //                     ubA.setZero();
-// //                     ubA << dq_max_safe(0) - J_pinv(0,0)*v_prev(0) - J_pinv(0,1)*v_prev(1) - J_pinv(0,2)*v_prev(2) - J_pinv(0,3)*(v_prev(3) + (F_ext_EE_0_lowpass(3)*T - T*d_rot*v_prev(3))/m_rot) - J_pinv(0,4)*(v_prev(4) + (F_ext_EE_0_lowpass(4)*T - T*d_rot*v_prev(4))/m_rot) - J_pinv(0,5)*(v_prev(5) + (F_ext_EE_0_lowpass(5)*T - T*d_rot*v_prev(5))/m_rot),
-// //                     dq_max_safe(1) - J_pinv(1,0)*v_prev(0) - J_pinv(1,1)*v_prev(1) - J_pinv(1,2)*v_prev(2) - J_pinv(1,3)*(v_prev(3) + (F_ext_EE_0_lowpass(3)*T - T*d_rot*v_prev(3))/m_rot) - J_pinv(1,4)*(v_prev(4) + (F_ext_EE_0_lowpass(4)*T - T*d_rot*v_prev(4))/m_rot) - J_pinv(1,5)*(v_prev(5) + (F_ext_EE_0_lowpass(5)*T - T*d_rot*v_prev(5))/m_rot),
-// //                     dq_max_safe(2) - J_pinv(2,0)*v_prev(0) - J_pinv(2,1)*v_prev(1) - J_pinv(2,2)*v_prev(2) - J_pinv(2,3)*(v_prev(3) + (F_ext_EE_0_lowpass(3)*T - T*d_rot*v_prev(3))/m_rot) - J_pinv(2,4)*(v_prev(4) + (F_ext_EE_0_lowpass(4)*T - T*d_rot*v_prev(4))/m_rot) - J_pinv(2,5)*(v_prev(5) + (F_ext_EE_0_lowpass(5)*T - T*d_rot*v_prev(5))/m_rot),
-// //                     dq_max_safe(3) - J_pinv(3,0)*v_prev(0) - J_pinv(3,1)*v_prev(1) - J_pinv(3,2)*v_prev(2) - J_pinv(3,3)*(v_prev(3) + (F_ext_EE_0_lowpass(3)*T - T*d_rot*v_prev(3))/m_rot) - J_pinv(3,4)*(v_prev(4) + (F_ext_EE_0_lowpass(4)*T - T*d_rot*v_prev(4))/m_rot) - J_pinv(3,5)*(v_prev(5) + (F_ext_EE_0_lowpass(5)*T - T*d_rot*v_prev(5))/m_rot),
-// //                     dq_max_safe(4) - J_pinv(4,0)*v_prev(0) - J_pinv(4,1)*v_prev(1) - J_pinv(4,2)*v_prev(2) - J_pinv(4,3)*(v_prev(3) + (F_ext_EE_0_lowpass(3)*T - T*d_rot*v_prev(3))/m_rot) - J_pinv(4,4)*(v_prev(4) + (F_ext_EE_0_lowpass(4)*T - T*d_rot*v_prev(4))/m_rot) - J_pinv(4,5)*(v_prev(5) + (F_ext_EE_0_lowpass(5)*T - T*d_rot*v_prev(5))/m_rot),
-// //                     dq_max_safe(5) - J_pinv(5,0)*v_prev(0) - J_pinv(5,1)*v_prev(1) - J_pinv(5,2)*v_prev(2) - J_pinv(5,3)*(v_prev(3) + (F_ext_EE_0_lowpass(3)*T - T*d_rot*v_prev(3))/m_rot) - J_pinv(5,4)*(v_prev(4) + (F_ext_EE_0_lowpass(4)*T - T*d_rot*v_prev(4))/m_rot) - J_pinv(5,5)*(v_prev(5) + (F_ext_EE_0_lowpass(5)*T - T*d_rot*v_prev(5))/m_rot),
-// //                     dq_max_safe(6) - J_pinv(6,0)*v_prev(0) - J_pinv(6,1)*v_prev(1) - J_pinv(6,2)*v_prev(2) - J_pinv(6,3)*(v_prev(3) + (F_ext_EE_0_lowpass(3)*T - T*d_rot*v_prev(3))/m_rot) - J_pinv(6,4)*(v_prev(4) + (F_ext_EE_0_lowpass(4)*T - T*d_rot*v_prev(4))/m_rot) - J_pinv(6,5)*(v_prev(5) + (F_ext_EE_0_lowpass(5)*T - T*d_rot*v_prev(5))/m_rot);
-//                     
-//                     qpOASES::real_t lbA[7] = {dq_min_safe(0) - J_pinv(0,0)*v_prev(0) - J_pinv(0,1)*v_prev(1) - J_pinv(0,2)*v_prev(2) - J_pinv(0,3)*(v_prev(3) + (F_ext_EE_0_lowpass(3)*T - T*d_rot*v_prev(3))/m_rot) - J_pinv(0,4)*(v_prev(4) + (F_ext_EE_0_lowpass(4)*T - T*d_rot*v_prev(4))/m_rot) - J_pinv(0,5)*(v_prev(5) + (F_ext_EE_0_lowpass(5)*T - T*d_rot*v_prev(5))/m_rot),
-//                     dq_min_safe(1) - J_pinv(1,0)*v_prev(0) - J_pinv(1,1)*v_prev(1) - J_pinv(1,2)*v_prev(2) - J_pinv(1,3)*(v_prev(3) + (F_ext_EE_0_lowpass(3)*T - T*d_rot*v_prev(3))/m_rot) - J_pinv(1,4)*(v_prev(4) + (F_ext_EE_0_lowpass(4)*T - T*d_rot*v_prev(4))/m_rot) - J_pinv(1,5)*(v_prev(5) + (F_ext_EE_0_lowpass(5)*T - T*d_rot*v_prev(5))/m_rot),
-//                     dq_min_safe(2) - J_pinv(2,0)*v_prev(0) - J_pinv(2,1)*v_prev(1) - J_pinv(2,2)*v_prev(2) - J_pinv(2,3)*(v_prev(3) + (F_ext_EE_0_lowpass(3)*T - T*d_rot*v_prev(3))/m_rot) - J_pinv(2,4)*(v_prev(4) + (F_ext_EE_0_lowpass(4)*T - T*d_rot*v_prev(4))/m_rot) - J_pinv(2,5)*(v_prev(5) + (F_ext_EE_0_lowpass(5)*T - T*d_rot*v_prev(5))/m_rot),
-//                     dq_min_safe(3) - J_pinv(3,0)*v_prev(0) - J_pinv(3,1)*v_prev(1) - J_pinv(3,2)*v_prev(2) - J_pinv(3,3)*(v_prev(3) + (F_ext_EE_0_lowpass(3)*T - T*d_rot*v_prev(3))/m_rot) - J_pinv(3,4)*(v_prev(4) + (F_ext_EE_0_lowpass(4)*T - T*d_rot*v_prev(4))/m_rot) - J_pinv(3,5)*(v_prev(5) + (F_ext_EE_0_lowpass(5)*T - T*d_rot*v_prev(5))/m_rot),
-//                     dq_min_safe(4) - J_pinv(4,0)*v_prev(0) - J_pinv(4,1)*v_prev(1) - J_pinv(4,2)*v_prev(2) - J_pinv(4,3)*(v_prev(3) + (F_ext_EE_0_lowpass(3)*T - T*d_rot*v_prev(3))/m_rot) - J_pinv(4,4)*(v_prev(4) + (F_ext_EE_0_lowpass(4)*T - T*d_rot*v_prev(4))/m_rot) - J_pinv(4,5)*(v_prev(5) + (F_ext_EE_0_lowpass(5)*T - T*d_rot*v_prev(5))/m_rot),
-//                     dq_min_safe(5) - J_pinv(5,0)*v_prev(0) - J_pinv(5,1)*v_prev(1) - J_pinv(5,2)*v_prev(2) - J_pinv(5,3)*(v_prev(3) + (F_ext_EE_0_lowpass(3)*T - T*d_rot*v_prev(3))/m_rot) - J_pinv(5,4)*(v_prev(4) + (F_ext_EE_0_lowpass(4)*T - T*d_rot*v_prev(4))/m_rot) - J_pinv(5,5)*(v_prev(5) + (F_ext_EE_0_lowpass(5)*T - T*d_rot*v_prev(5))/m_rot),
-//                     dq_min_safe(6) - J_pinv(6,0)*v_prev(0) - J_pinv(6,1)*v_prev(1) - J_pinv(6,2)*v_prev(2) - J_pinv(6,3)*(v_prev(3) + (F_ext_EE_0_lowpass(3)*T - T*d_rot*v_prev(3))/m_rot) - J_pinv(6,4)*(v_prev(4) + (F_ext_EE_0_lowpass(4)*T - T*d_rot*v_prev(4))/m_rot) - J_pinv(6,5)*(v_prev(5) + (F_ext_EE_0_lowpass(5)*T - T*d_rot*v_prev(5))/m_rot)};
-// //                     lbA.setZero();
-// //                     lbA << dq_min_safe(0) - J_pinv(0,0)*v_prev(0) - J_pinv(0,1)*v_prev(1) - J_pinv(0,2)*v_prev(2) - J_pinv(0,3)*(v_prev(3) + (F_ext_EE_0_lowpass(3)*T - T*d_rot*v_prev(3))/m_rot) - J_pinv(0,4)*(v_prev(4) + (F_ext_EE_0_lowpass(4)*T - T*d_rot*v_prev(4))/m_rot) - J_pinv(0,5)*(v_prev(5) + (F_ext_EE_0_lowpass(5)*T - T*d_rot*v_prev(5))/m_rot),
-// //                     dq_min_safe(1) - J_pinv(1,0)*v_prev(0) - J_pinv(1,1)*v_prev(1) - J_pinv(1,2)*v_prev(2) - J_pinv(1,3)*(v_prev(3) + (F_ext_EE_0_lowpass(3)*T - T*d_rot*v_prev(3))/m_rot) - J_pinv(1,4)*(v_prev(4) + (F_ext_EE_0_lowpass(4)*T - T*d_rot*v_prev(4))/m_rot) - J_pinv(1,5)*(v_prev(5) + (F_ext_EE_0_lowpass(5)*T - T*d_rot*v_prev(5))/m_rot),
-// //                     dq_min_safe(2) - J_pinv(2,0)*v_prev(0) - J_pinv(2,1)*v_prev(1) - J_pinv(2,2)*v_prev(2) - J_pinv(2,3)*(v_prev(3) + (F_ext_EE_0_lowpass(3)*T - T*d_rot*v_prev(3))/m_rot) - J_pinv(2,4)*(v_prev(4) + (F_ext_EE_0_lowpass(4)*T - T*d_rot*v_prev(4))/m_rot) - J_pinv(2,5)*(v_prev(5) + (F_ext_EE_0_lowpass(5)*T - T*d_rot*v_prev(5))/m_rot),
-// //                     dq_min_safe(3) - J_pinv(3,0)*v_prev(0) - J_pinv(3,1)*v_prev(1) - J_pinv(3,2)*v_prev(2) - J_pinv(3,3)*(v_prev(3) + (F_ext_EE_0_lowpass(3)*T - T*d_rot*v_prev(3))/m_rot) - J_pinv(3,4)*(v_prev(4) + (F_ext_EE_0_lowpass(4)*T - T*d_rot*v_prev(4))/m_rot) - J_pinv(3,5)*(v_prev(5) + (F_ext_EE_0_lowpass(5)*T - T*d_rot*v_prev(5))/m_rot),
-// //                     dq_min_safe(4) - J_pinv(4,0)*v_prev(0) - J_pinv(4,1)*v_prev(1) - J_pinv(4,2)*v_prev(2) - J_pinv(4,3)*(v_prev(3) + (F_ext_EE_0_lowpass(3)*T - T*d_rot*v_prev(3))/m_rot) - J_pinv(4,4)*(v_prev(4) + (F_ext_EE_0_lowpass(4)*T - T*d_rot*v_prev(4))/m_rot) - J_pinv(4,5)*(v_prev(5) + (F_ext_EE_0_lowpass(5)*T - T*d_rot*v_prev(5))/m_rot),
-// //                     dq_min_safe(5) - J_pinv(5,0)*v_prev(0) - J_pinv(5,1)*v_prev(1) - J_pinv(5,2)*v_prev(2) - J_pinv(5,3)*(v_prev(3) + (F_ext_EE_0_lowpass(3)*T - T*d_rot*v_prev(3))/m_rot) - J_pinv(5,4)*(v_prev(4) + (F_ext_EE_0_lowpass(4)*T - T*d_rot*v_prev(4))/m_rot) - J_pinv(5,5)*(v_prev(5) + (F_ext_EE_0_lowpass(5)*T - T*d_rot*v_prev(5))/m_rot),
-// //                     dq_min_safe(6) - J_pinv(6,0)*v_prev(0) - J_pinv(6,1)*v_prev(1) - J_pinv(6,2)*v_prev(2) - J_pinv(6,3)*(v_prev(3) + (F_ext_EE_0_lowpass(3)*T - T*d_rot*v_prev(3))/m_rot) - J_pinv(6,4)*(v_prev(4) + (F_ext_EE_0_lowpass(4)*T - T*d_rot*v_prev(4))/m_rot) - J_pinv(6,5)*(v_prev(5) + (F_ext_EE_0_lowpass(5)*T - T*d_rot*v_prev(5))/m_rot);
-//                     
-//                     qpOASES::real_t lb[8] = {1/20,-qpOASES::INFTY,-qpOASES::INFTY,-qpOASES::INFTY,-qpOASES::INFTY,-qpOASES::INFTY,-qpOASES::INFTY,-qpOASES::INFTY};
-//                     qpOASES::real_t ub[8] = {1/mass_[0],qpOASES::INFTY,qpOASES::INFTY,qpOASES::INFTY,qpOASES::INFTY,qpOASES::INFTY,qpOASES::INFTY,qpOASES::INFTY};
-//                     
+//                     Eigen::Matrix<double,7,1> ubA_eigen = Eigen::Matrix<double,7,1>::Zero();
+//                     ubA_eigen = dq_max_safe - J_pinv.block(0,0,7,3)*v_prev.head(3)-J_pinv.block(3,0,7,3)*F_ext_EE_0_lowpass.tail(3)/d_rot_;
+//                     qpOASES::real_t ubA[7];
+//                     Eigen::Matrix<double,7,1> lbA_eigen = Eigen::Matrix<double,7,1>::Zero();
+//                     lbA_eigen = dq_min_safe - J_pinv.block(0,0,7,3)*v_prev.head(3)-J_pinv.block(3,0,7,3)*F_ext_EE_0_lowpass.tail(3)/d_rot_;
+//                     qpOASES::real_t lbA[7];
+//                     for (size_t i = 0; i < 7; i++) {
+//                         ubA[i] = ubA_eigen[i];
+//                         lbA[i] = lbA_eigen[i];
+//                     }
 //                     int nWSR = 100;
+//                     qpOASES::real_t lb[8] = {-1/m_tr_,-qpOASES::INFTY,-qpOASES::INFTY,-qpOASES::INFTY,-qpOASES::INFTY,-qpOASES::INFTY,-qpOASES::INFTY,-qpOASES::INFTY};
+//                     qpOASES::real_t ub[8] = {-1/100, qpOASES::INFTY,qpOASES::INFTY,qpOASES::INFTY,qpOASES::INFTY,qpOASES::INFTY,qpOASES::INFTY,qpOASES::INFTY};
 //                     qpOASES::SQProblem opt_problem( 8,7 );
 //                     qpOASES::returnValue return_value = opt_problem.init( H,g,A,lb,ub,lbA,ubA, nWSR,0,solution );
-//                     std::cout << qpOASES::getSimpleStatus(return_value) << std::endl;
-//                     
-//                     
+// // //                     std::cout << qpOASES::getSimpleStatus(return_value) << std::endl;
+// //                     
+// //                     
 //                     opt_problem.getPrimalSolution(solution);
-//                     for (size_t i = 0; i < 8; i++) {
-//                         if (i==0) {
-//                             std::cout << 1/solution[i] << std::endl;
-//                         }
-//                         else {
-//                             std::cout << solution[i] << std::endl;
-//                         }
-//                     }
-//                     
-//                     double m_tr = 1/solution[0];
-// //                     std::cout << m_tr << std::endl;
-//                     double a = solution[1];
-//                     Eigen::Matrix<double,6,1> delta;
-//                     delta.setZero();
-//                     delta << solution[2],solution[3],solution[4],solution[5],solution[6],solution[7];
-//                     Eigen::Matrix<double,6,1> v_c_lim;
-//                     v_c_lim.setZero();
-//                     v_c_lim.head(3) = (1-d_tr/m_tr*T_)*v_prev.head(3)+F_ext_EE_0_lowpass.head(3)*T_/m_tr;
-//                     v_c_lim.tail(3) = (1-d_rot/m_rot*T_)*v_prev.tail(3)+F_ext_EE_0_lowpass.tail(3)*T_/m_rot;
-//                     dq_c_lim = J_pinv*(v_c_lim+delta)+B*a;
-                    
-                    
-//                     Eigen::Matrix<double,7,6> jj = J_pinv;
-//                     Eigen::Matrix<double,6,1> ff = F_ext_EE_0_lowpass;
-//                     Eigen::FullPivLU<Eigen::MatrixXd> lu(J);
-//                     Eigen::MatrixXd J_null = lu.kernel();
-//                     double p[OPTIMIZER4_NUM_PARAMETERS] = {jj(0,0),jj(0,1),jj(0,2),jj(0,3),jj(0,4),jj(0,5),     jj(1,0),jj(1,1),jj(1,2),jj(1,3),jj(1,4),jj(1,5),        jj(2,0),jj(2,1),jj(2,2),jj(2,3),jj(2,4),jj(2,5),        jj(3,0),jj(3,1),jj(3,2),jj(3,3),jj(3,4),jj(3,5),        jj(4,0),jj(4,1),jj(4,2),jj(4,3),jj(4,4),jj(4,5),        jj(5,0),jj(5,1),jj(5,2),jj(5,3),jj(5,4),jj(5,5),        jj(6,0),jj(6,1),jj(6,2),jj(6,3),jj(6,4),jj(6,5),
-//                     ff[0], ff[1], ff[2],ff[3], ff[4], ff[5],
-//                     v_prev[0], v_prev[1], v_prev[2],v_prev[3],v_prev[4],v_prev[5],
-//                     J_null(0),J_null(1),J_null(2),J_null(3),J_null(4),J_null(5),J_null(6),
-//                     dq_max_safe[0],dq_max_safe[1],dq_max_safe[2],dq_max_safe[3],dq_max_safe[4],dq_max_safe[5],dq_max_safe[6],
-//                     dq_min_safe[0],dq_min_safe[1],dq_min_safe[2],dq_min_safe[3],dq_min_safe[4],dq_min_safe[5],dq_min_safe[6],
-//                     mass_[0],mass_[3], damping_[0], damping_[3], 1000.0, 0.001, 20.0, 10000.0
-//                     };  // parameter
-//                     /*double u[OPTIMIZER2_NUM_DECISION_VARIABLES] = {10.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0};*/  // initial guess
-//                     
-//                     optimizer4Cache *cache = optimizer4_new();
-//                     optimizer4SolverStatus status = optimizer4_solve(cache, u, p, 0, 0);
-//                     std::cout << bool(status.exit_status) << std::endl;
-//                     optimizer4_free(cache);
-//                     Eigen::Matrix<double,6,1> delta;
-//                     delta[0] = u[2];
-//                     delta[1] = u[3];
-//                     delta[2] = u[4];
-//                     delta[3] = u[5];
-//                     delta[4] = u[6];
-//                     delta[5] = u[7];
-//                     Eigen::Matrix<double,6,1> v_c_opt;
-//                     v_c_opt.setZero();
+//                     Eigen::Matrix<double,6,1> delta = Eigen::Matrix<double,6,1>::Zero();
 //                     for (size_t i = 0; i < 6; i++) {
-//                         if (i < 3) {
-//                             v_c_opt[i] = 1/(1+damping_[i]/u[0]*T_)*(v_prev[i]+F_ext_EE_0_lowpass[i]/u[0]*T_);
-//                         }
-//                         else {
-//                             v_c_opt[i] = 1/(1+damping_[i]/mass_[i]*T_)*(v_prev[i]+F_ext_EE_0_lowpass[i]/mass_[i]*T_);
-//                         }
-//                         
-//     //                     v_c[i] = (1-damping_[i]/mass_[i]*T_)*v_prev[i]+F_ext_EE_0(i)*T_/mass_[i];
+//                         delta(i) = solution[2+i];
 //                     }
-//                     dq_c_opt = jj*(v_c_opt+delta)+u[1]*J_null;
-// //                     dq_c_opt = jj*(v_c_opt)+u[1]*J_null;
+//                     Eigen::Matrix<double,6,1> v_adm_lim = Eigen::Matrix<double,6,1>::Zero();
+//                     std::cout << -1/solution[0] << std::endl;
+//                     v_adm_lim.head(3) = v_prev.head(3)-solution[0]*(-d_tr_*v_prev.head(3)*T_+F_ext_EE_0_lowpass.head(3)*T_);
+//                     v_adm_lim.tail(3) = F_ext_EE_0_lowpass.tail(3)/d_rot_;
+//                     dq_c_opt = J_pinv*(v_adm_lim+delta)+b*solution[1];
                     for (size_t i = 0; i < 7; i++) {
                         dq_c_lim(i) = std::max(std::min(dq_c[i], dq_max_safe[i]), dq_min_safe[i]);
                     }
+//                     dq_c_lim = dq_c_opt;
                 }
                 else {
                     dq_c_lim = dq_c;
                 }
             }
         }
-        
+        F_ext_EE_0_lowpass_prev_ = F_ext_EE_0_lowpass;
         for (size_t i = 0; i < 7; i++) {
             joint_handles_[i].setCommand(dq_c_lim(i));
         }
         
         Eigen::Matrix<double,2,1> u_eigen;
-        for (size_t i = 0; i < 2; i++) {
-            u_eigen[i] = solution[i];
-        }
+        u_eigen.setZero();
         std::vector<Eigen::VectorXd> custom_data(12);
         custom_data[0] = F_ext_S_s;
         custom_data[1] = F_ext_EE_0;
@@ -447,6 +315,24 @@ namespace trial_controller_velocity
         safe_velocities[0] = last_commanded_velocity+safe_min_acceleration*kDeltaT;
         safe_velocities[1] = last_commanded_velocity+safe_max_acceleration*kDeltaT;
         return safe_velocities;
+    }
+    
+    void TrialControllerVelocity::trialControllerVelocityParamCallback(
+    trial_controller_velocity::trial_controller_velocity_paramConfig& config,
+    uint32_t /*level*/) {
+        if (!dyn_params_set) {
+            config.m_tr = m_tr_;
+            config.m_rot = m_rot_;
+            config.d_tr = d_tr_;
+            config.d_rot = d_rot_;
+            dyn_params_set = true;
+        }
+        else {
+            m_tr_ = config.m_tr;
+            m_rot_ = config.m_rot;
+            d_tr_ = config.d_tr;
+            d_rot_ = config.d_rot;
+        }
     }
 }
 

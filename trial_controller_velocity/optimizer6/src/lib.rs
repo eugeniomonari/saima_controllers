@@ -2,7 +2,7 @@
 // Auto-generated file by OptimizationEngine
 // See https://alphaville.github.io/optimization-engine/
 //
-// Generated at: 2024-07-16 09:27:46.955714
+// Generated at: 2024-07-16 11:05:22.006296
 //
 
 use libc::{c_double, c_ulong, c_ulonglong};
@@ -48,10 +48,10 @@ const SUFFICIENT_INFEASIBILITY_DECREASE_COEFFICIENT: f64 = 0.1;
 // ---Public Constants-----------------------------------------------------------------------------------
 
 /// Number of decision variables
-pub const OPTIMIZER6_NUM_DECISION_VARIABLES: usize = 9;
+pub const OPTIMIZER6_NUM_DECISION_VARIABLES: usize = 6;
 
 /// Number of parameters
-pub const OPTIMIZER6_NUM_PARAMETERS: usize = 82;
+pub const OPTIMIZER6_NUM_PARAMETERS: usize = 53;
 
 /// Number of parameters associated with augmented Lagrangian
 pub const OPTIMIZER6_N1: usize = 0;

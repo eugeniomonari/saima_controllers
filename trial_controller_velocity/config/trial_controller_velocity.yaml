@@ -1,11 +1,14 @@
 trial_controller_velocity:
     type: trial_controller_velocity/TrialControllerVelocity
-    arm_id: panda
-    joint_names:
-        - panda_joint1
-        - panda_joint2
-        - panda_joint3
-        - panda_joint4
-        - panda_joint5
-        - panda_joint6
-        - panda_joint7
+    m_tr: 5
+    m_rot: 0.1
+    d_tr: 5
+    d_rot: 0.2
+    only_transl: true
+    only_x: true
+    only_damping: false
+    small_mass: true
+    m_tr_no_mass: 0.05
+    m_rot_no_mass: 0.05
+    d_tr_no_mass: 10
+    d_rot_no_mass: 0.5

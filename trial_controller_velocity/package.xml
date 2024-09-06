@@ -15,6 +15,7 @@
   <depend>pluginlib</depend>
   <depend>data_extraction</depend>
   <depend>general_functionalities</depend>
+  <depend>dynamic_reconfigure</depend>
   <depend>qpoases</depend>
 
   <exec_depend>franka_control</exec_depend>

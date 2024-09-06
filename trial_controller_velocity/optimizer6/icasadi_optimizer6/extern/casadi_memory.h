@@ -13,7 +13,7 @@
  *   + version: 0.0.0
  *   + licence: MIT
  *
- * Generated at: 2024-07-16 09:27:46.848365
+ * Generated at: 2024-07-16 11:05:21.900066
  *
  */
 
@@ -24,7 +24,7 @@
  */
 #define COST_SZ_ARG_OPTIMIZER6 3
 #define COST_SZ_IW_OPTIMIZER6 0
-#define COST_SZ_W_OPTIMIZER6 23
+#define COST_SZ_W_OPTIMIZER6 19
 #define COST_SZ_RES_OPTIMIZER6 1
 
 /*
@@ -32,7 +32,7 @@
  */
 #define GRAD_SZ_ARG_OPTIMIZER6 3
 #define GRAD_SZ_IW_OPTIMIZER6 0
-#define GRAD_SZ_W_OPTIMIZER6 52
+#define GRAD_SZ_W_OPTIMIZER6 47
 #define GRAD_SZ_RES_OPTIMIZER6 1
 
 /*
@@ -48,5 +48,5 @@
  */
 #define F2_SZ_ARG_OPTIMIZER6 2
 #define F2_SZ_IW_OPTIMIZER6 0
-#define F2_SZ_W_OPTIMIZER6 17
+#define F2_SZ_W_OPTIMIZER6 14
 #define F2_SZ_RES_OPTIMIZER6 1

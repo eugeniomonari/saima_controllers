@@ -13,7 +13,7 @@ if move_to_ready:
     commander.set_named_target('ready')
     plan = commander.plan()
     commander.go(wait=True)
-
+    
 rospy.wait_for_service('/controller_manager/load_controller')
 load_controller = rospy.ServiceProxy('/controller_manager/load_controller', LoadController)
 load_controller('trial_controller_velocity')

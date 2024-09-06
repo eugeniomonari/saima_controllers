@@ -12,12 +12,12 @@
 /**
  * Number of decision variables
  */
-#define OPTIMIZER6_NUM_DECISION_VARIABLES 9
+#define OPTIMIZER6_NUM_DECISION_VARIABLES 6
 
 /**
  * Number of parameters
  */
-#define OPTIMIZER6_NUM_PARAMETERS 82
+#define OPTIMIZER6_NUM_PARAMETERS 53
 
 /**
  * Number of parameters associated with augmented Lagrangian

@@ -9,59 +9,54 @@ import os
 
 # Build parametric optimizer
 # ------------------------------------
-u = cs.SX.sym("u", 9)
-p = cs.SX.sym("p", 82)
+u = cs.SX.sym("u", 6)
+p = cs.SX.sym("p", 53)
 
 m_tr = u[0]
 d_tr = u[1]
 a = u[2]
-delta = cs.SX.sym('delta',6)
-for i in range(6):
+delta = cs.SX.sym('delta',3)
+for i in range(3):
     delta[i] = p[3+i]
 
-J_pinv = cs.SX.sym('J_pinv',7,6)
+J_pinv = cs.SX.sym('J_pinv',7,3)
 for i in range(7):
-    for j in range(6):
-        J_pinv[i,j] = p[6*i+j]
+    for j in range(3):
+        J_pinv[i,j] = p[3*i+j]
                 
-F = cs.SX.sym('F',6)
-for i in range(6):
-    F[i] = p[42+i]
+F = cs.SX.sym('F',3)
+for i in range(3):
+    F[i] = p[21+i]
         
-v_prev = cs.SX.sym('v_prev',6)
-for i in range(6):
-    v_prev[i] = p[48+i]
+v_prev = cs.SX.sym('v_prev',3)
+for i in range(3):
+    v_prev[i] = p[24+i]
     
 b = cs.SX.sym('b',7)
 for i in range(7):
-    b[i] = p[54+i]
+    b[i] = p[27+i]
     
 dq_safe_max = cs.SX.sym('dq_safe_max',7)
 for i in range(7):
-    dq_safe_max[i] = p[61+i]
+    dq_safe_max[i] = p[34+i]
     
 dq_safe_min = cs.SX.sym('dq_safe_min',7)
 for i in range(7):
-    dq_safe_min[i] = p[68+i]
+    dq_safe_min[i] = p[41+i]
     
-m_tr_0 = p[75]
-d_tr_0 = p[76]
-m_rot_0 = p[77]
-d_rot_0 = p[78]
-k_1 = p[79]
-k_2 = p[80]
-k_3 = p[81]
+m_tr_0 = p[48]
+d_tr_0 = p[49]
+k_1 = p[50]
+k_2 = p[51]
+k_3 = p[52]
 
 #cost = k_1*pow(m_tr-m_tr_0,2)+k_1*pow(d_tr-d_tr_0,2)+k_2*pow(a,2)+k_3*np.dot(delta[:,0],delta[:,0])
 cost = k_1*cs.constpow(m_tr-m_tr_0,2)+k_1*cs.constpow(d_tr-d_tr_0,2)+k_2*cs.constpow(a,2)+k_3*(delta.T@delta)
 
 T = 0.001
-v_adm_lim = cs.SX.sym('v_adm_lim',6)
-for i in range(6):
-    if i < 3:
-        v_adm_lim[i] = (m_tr*v_prev[i]+F[i]*T)/(m_tr+d_tr*T)
-    else:
-        v_adm_lim[i] = (m_rot_0*v_prev[i]+F[i]*T)/(m_rot_0+d_rot_0*T)
+v_adm_lim = cs.SX.sym('v_adm_lim',3)
+for i in range(3):
+    v_adm_lim[i] = (m_tr*v_prev[i]+F[i]*T)/(m_tr+d_tr*T)
         
 dq_c_lim = J_pinv@(v_adm_lim+delta)+b*a
 

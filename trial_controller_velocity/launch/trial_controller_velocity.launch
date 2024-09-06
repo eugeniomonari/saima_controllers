@@ -19,5 +19,6 @@
   <node name="trial_controller_velocity_node" pkg="trial_controller_velocity" type="trial_controller_velocity.py" output="screen" clear_params="true">
        <param name="move_to_ready" value="$(arg move_to_ready)" /> 
   </node>
+  <node name="rqt_reconfigure" pkg="rqt_reconfigure" type="rqt_reconfigure" required="false" />
 <!--   <node name="trial_controller_velocity_node" pkg="trial_controller_velocity_node" type="trial_controller_velocity_node.py" output="screen"/> -->
 </launch>
