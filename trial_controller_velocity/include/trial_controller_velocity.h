@@ -28,7 +28,7 @@ namespace trial_controller_velocity
         std::unique_ptr<franka_hw::FrankaModelHandle> model_handle_;
         std::vector<hardware_interface::JointHandle> joint_handles_;
         panda_ecat_comm::ecatCommATIAxiaFTSensor FT_sensor;
-        typedef std::tuple<std::array<double,6>,std::array<double,6>,std::array<double,6>,std::array<double,7>,std::array<double,7>,std::array<double,6>,std::array<double,7>,std::array<double,7>,std::array<double,7>,std::array<double,7>,std::array<double,1>,std::array<double,1>> custom_data_t;
+        typedef std::tuple<std::array<double,6>,std::array<double,7>,std::array<double,7>,std::array<double,7>,std::array<double,49>,std::array<double,2>,std::array<double,6>,std::array<double,1>,std::array<double,1>,std::array<double,1>,std::array<double,1>> custom_data_t;
         typedef data_extraction::tuple_cat_t<data_extraction::state_model_data_t,custom_data_t> state_model_custom_data_t;
         data_extraction::DataExtraction<state_model_custom_data_t> data_extraction_;
         general_functionalities::locking lockingFunction;
