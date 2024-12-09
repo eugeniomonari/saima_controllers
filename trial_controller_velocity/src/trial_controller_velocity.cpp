@@ -225,7 +225,8 @@ namespace trial_controller_velocity
                     qpOASES::real_t g[2] = {-2*m_tr_,-2*d_tr_};
                     Eigen::Matrix<double,14,2> A_eigen = Eigen::Matrix<double,14,2>::Zero();
                     Eigen::Matrix<double,7,1> B = dq_max_safe-J_pinv.block(0,3,7,3)*(m_rot_*v_prev.tail(3)+F_ext_EE_0_lowpass.tail(3)*T_)/(m_rot_+d_rot_*T_);
-                    Eigen::Matrix<double,7,1> C = dq_min_safe-J_pinv.block(0,3igen::Matrix<double,6,1> v_adm_lim = Eigen::Matrix<double,6,1>::Zero();
+                    Eigen::Matrix<double,7,1> C = dq_min_safe-J_pinv.block(0,3,7,3)*(m_rot_*v_prev.tail(3)+F_ext_EE_0_lowpass.tail(3)*T_)/(m_rot_+d_rot_*T_);
+//                     Eigen::Matrix<double,6,1> v_adm_lim = Eigen::Matrix<double,6,1>::Zero();
 //                     v_adm_lim.head(3) = (solution[0]*v_prev.head(3)+F_ext_EE_0_lowpass.head(3)*T_)/(solution[0]+solution[1]*T_);
 //                     v_adm_lim.tail(3) = (m_rot_*v_prev.tail(3)+F_ext_EE_0_lowpass.tail(3)*T_)/(m_rot_+d_rot_*T_);
 //                     dq_c_lim = J_pinv*(v_adm_lim);,7,3)*(m_rot_*v_prev.tail(3)+F_ext_EE_0_lowpass.tail(3)*T_)/(m_rot_+d_rot_*T_);
