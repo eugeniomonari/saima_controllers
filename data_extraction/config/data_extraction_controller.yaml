@@ -1,0 +1,3 @@
+data_extraction_controller:
+    type: data_extraction/DataExtractionController
+    eth_interface_name: enxa0cec88b0292

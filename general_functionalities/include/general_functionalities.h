@@ -33,7 +33,7 @@ namespace general_functionalities
     
     class initial_operations {
         public:
-            bool initFrankaVelFT(hardware_interface::RobotHW* robot_hw, std::unique_ptr<franka_hw::FrankaStateHandle>* state_handle, std::unique_ptr<franka_hw::FrankaModelHandle>* model_handle,std::vector<hardware_interface::JointHandle>* joint_handles, panda_ecat_comm::ecatCommATIAxiaFTSensor& FT_sensor, EEPoleBaseFrameExtWrenchComputation& external_force_computation, int filter_level);
+            bool initFrankaVelFT(hardware_interface::RobotHW* robot_hw, std::unique_ptr<franka_hw::FrankaStateHandle>* state_handle, std::unique_ptr<franka_hw::FrankaModelHandle>* model_handle,std::vector<hardware_interface::JointHandle>* joint_handles, panda_ecat_comm::ecatCommATIAxiaFTSensor& FT_sensor, EEPoleBaseFrameExtWrenchComputation& external_force_computation, int filter_level, std::string eth_interface_name);
             void check_initial_bias(panda_ecat_comm::ecatCommATIAxiaFTSensor& FT_sensor);
             bool bias_checked = false;
             bool bias_error = false;

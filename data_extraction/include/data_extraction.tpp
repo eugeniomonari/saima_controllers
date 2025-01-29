@@ -177,6 +177,43 @@ namespace data_extraction
         }
     }
     
+    template<typename data> void DataExtraction<data>::write_data_to_csv_sequential(std::vector<std::string> custom_headers,bool only_custom)
+    {
+        if (started)
+        {
+            sequential_number_ = sequential_number_ + 1;
+            std::string date(sequential_date_);
+            date_ = date;
+            std::string filename = "/home/saima/recorded_data/recorded_data_identification_" + date + std::to_string(sequential_number_) + ".csv";
+            std::ofstream myfile;
+            myfile.open(filename);
+            std::vector<std::string> header_values;
+            if (!only_custom)
+            {
+                header_values = state_header;
+                header_values.insert(header_values.end(),model_header.begin(),model_header.end());
+                if (custom_headers.size() > 0)
+                {
+                    header_values.insert(header_values.end(),custom_headers.begin(),custom_headers.end());
+                }
+            }
+            else
+            {
+                header_values = custom_headers;
+            }
+            write_header(header_values);
+            myfile << csv_header.str();
+            for (size_t i = 0; i < data_buffer.size(); i++) // data_buffer.size()
+            {
+                write_csv_data_line(data_buffer[i]);
+                
+            }
+            myfile << csv_data.str();
+            myfile.close();
+            ROS_INFO("Data successfully saved");
+        }
+    }
+    
     template<typename data>
     template<size_t I>
     void DataExtraction<data>::write_header(std::vector<std::string> header_values)

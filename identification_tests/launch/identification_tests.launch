@@ -1,0 +1,15 @@
+<?xml version="1.0" ?>
+<launch>
+  <arg name="load_handle" default="false" />
+  <arg name="load_driller" default="false" />
+  <arg name="load_driller_new" default="false" />
+
+
+  <rosparam command="load" file="$(find data_extraction)/config/data_extraction_controller.yaml"/> 
+  <include file="$(find panda_moveit_config)/launch/panda_control_moveit_rviz.launch">
+    <arg name="load_handle" value="$(arg load_handle)" />
+    <arg name="load_driller" value="$(arg load_driller)" />
+    <arg name="load_driller_new" value="$(arg load_driller_new)" />
+  </include>
+  <node name="identification_tests" pkg="identification_tests" type="identification_tests.py" output="screen" required="true" />
+</launch>

@@ -1,0 +1,30 @@
+<?xml version="1.0" ?>
+<launch>
+<!--  <arg name="robot_ip" default="172.16.0.2"/>
+  <arg name="load_gripper" default="false" />
+  <arg name="move_to_ready" default="true" />
+  <include file="$(find franka_control)/launch/franka_control.launch" >
+    <arg name="robot_ip" value="$(arg robot_ip)" />
+    <arg name="load_gripper" value="$(arg load_gripper)" />
+  </include>-->
+<!--  <group if="$(arg move_to_ready)">
+    <include file="$(find panda_moveit_config)/launch/panda_moveit.launch">
+      <arg name="load_gripper" value="false" />
+    </include>
+  </group>-->
+  <arg name="move_to_ready" default="true" />
+  <group if="$(arg move_to_ready)">
+    <include file="$(find panda_moveit_config)/launch/panda_control_moveit_rviz.launch">
+      <arg name="load_driller_new" value="true" />
+    </include>
+  </group>
+  
+
+  <rosparam command="load" file="$(find simple_admittance_controller)/config/simple_admittance_controller.yaml" />
+<!--   <node name="controller_spawner" pkg="controller_manager" type="spawner" respawn="false" output="screen" args="simple_admittance_controller"/> -->
+  <node name="simple_admittance_controller_node" pkg="simple_admittance_controller" type="simple_admittance_controller.py" output="screen" clear_params="true">
+       <param name="move_to_ready" value="$(arg move_to_ready)" /> 
+  </node>
+  <node name="rqt_reconfigure" pkg="rqt_reconfigure" type="rqt_reconfigure" required="false" />
+<!--   <node name="simple_admittance_controller_node" pkg="simple_admittance_controller_node" type="simple_admittance_controller_node.py" output="screen"/> -->
+</launch>

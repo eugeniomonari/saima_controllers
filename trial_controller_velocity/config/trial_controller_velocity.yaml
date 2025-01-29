@@ -4,11 +4,11 @@ trial_controller_velocity:
     m_rot: 0.1
     d_tr: 10
     d_rot: 0.4
-    only_transl: true
+    only_transl: false
     only_x: false
     only_damping: false
     small_mass: true
     m_tr_no_mass: 5
     m_rot_no_mass: 0.1
     d_tr_no_mass: 50
-    d_rot_no_mass: 0.4
+    d_rot_no_mass: 5

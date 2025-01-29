@@ -1,8 +1,8 @@
 <?xml version="1.0"?>
 <package format="2">
-  <name>data_extraction</name>
+  <name>simple_admittance_controller</name>
   <version>0.0.0</version>
-  <description>The data_extraction package</description>
+  <description>The simple_admittance_controller package</description>
   <license>TODO</license>
   <maintainer email="eugenio@todo.todo">eugenio</maintainer>
 
@@ -13,7 +13,9 @@
   <depend>hardware_interface</depend>
   <depend>libfranka</depend>
   <depend>pluginlib</depend>
+  <depend>data_extraction</depend>
   <depend>general_functionalities</depend>
+  <depend>dynamic_reconfigure</depend>
 
   <exec_depend>franka_control</exec_depend>
   
@@ -21,6 +23,6 @@
   <exec_depend>panda_ecat_comm</exec_depend>
 
   <export>
-    <controller_interface plugin="${prefix}/data_extraction_plugin.xml"/>
+    <controller_interface plugin="${prefix}/simple_admittance_controller_plugin.xml"/>
   </export>
 </package>

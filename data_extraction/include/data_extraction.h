@@ -36,6 +36,7 @@ namespace data_extraction
         template<size_t I = 0>
         void update_data_custom(data *current_data,const std::vector<Eigen::VectorXd>& custom_data,bool only_custom = false);
         void write_data_to_csv(std::vector<std::string> custom_headers = std::vector<std::string>(),bool only_custom = false);
+        void write_data_to_csv_sequential(std::vector<std::string> custom_headers = std::vector<std::string>(),bool only_custom = false);
         template<size_t I = 0>
         void write_header(std::vector<std::string> header_values);
         template<size_t I = 0>
@@ -43,6 +44,8 @@ namespace data_extraction
         double initial_time_ = 0;
         bool initial_time_set_ = false;
         bool error_happened = false;
+        int sequential_number_ = 0;
+        char sequential_date_[80];
     };
 }
 

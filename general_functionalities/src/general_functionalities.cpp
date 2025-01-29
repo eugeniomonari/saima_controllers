@@ -69,7 +69,7 @@ namespace general_functionalities
     }
 
     
-    bool initial_operations::initFrankaVelFT(hardware_interface::RobotHW* robot_hw, std::unique_ptr<franka_hw::FrankaStateHandle>* state_handle, std::unique_ptr<franka_hw::FrankaModelHandle>* model_handle,std::vector<hardware_interface::JointHandle>* joint_handles, panda_ecat_comm::ecatCommATIAxiaFTSensor& FT_sensor, EEPoleBaseFrameExtWrenchComputation& external_force_computation, int filter_level)
+    bool initial_operations::initFrankaVelFT(hardware_interface::RobotHW* robot_hw, std::unique_ptr<franka_hw::FrankaStateHandle>* state_handle, std::unique_ptr<franka_hw::FrankaModelHandle>* model_handle,std::vector<hardware_interface::JointHandle>* joint_handles, panda_ecat_comm::ecatCommATIAxiaFTSensor& FT_sensor, EEPoleBaseFrameExtWrenchComputation& external_force_computation, int filter_level, std::string eth_interface_name)
     {
         std::string arm_id ("panda");
         std::vector<std::string> joint_names = {"panda_joint1","panda_joint2","panda_joint3","panda_joint4","panda_joint5","panda_joint6","panda_joint7"};
@@ -120,7 +120,8 @@ namespace general_functionalities
             return false;
             }
         }
-            char array[] = "enxa0cec88b0292";
+            char array[1024];
+            strcpy(array, eth_interface_name.c_str());
             char *cstr = array;
             int slaves[1] = {2};
             FT_sensor.ecatinit(slaves,cstr,500);

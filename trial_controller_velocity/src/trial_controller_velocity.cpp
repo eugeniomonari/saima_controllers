@@ -1,7 +1,9 @@
 #include "trial_controller_velocity.h"
-#include <Eigen/Dense>
+// #include <Eigen/Dense>
 #include <pluginlib/class_list_macros.h>
 #include <franka/rate_limiting.h>
+#include <chrono>
+#include <ctime>
 
 #include <qpOASES.hpp>
 
@@ -20,7 +22,7 @@ namespace trial_controller_velocity
             }
         }
         if (only_damping_ || (!only_damping_ && small_mass_)) {
-            initOperations.initFrankaVelFT(robot_hw,&state_handle_,&model_handle_,&joint_handles_,FT_sensor,external_force_computation,7);
+            initOperations.initFrankaVelFT(robot_hw,&state_handle_,&model_handle_,&joint_handles_,FT_sensor,external_force_computation,7,"enxa0cec88b0292");
             if (!node_handle.getParam("m_tr_no_mass", m_tr_)) {
                 ROS_ERROR_STREAM("HandGuidanceController: could not get m_tr_no_mass from parameter server");
                 return false;
@@ -39,7 +41,7 @@ namespace trial_controller_velocity
             }
         }
         else {
-            initOperations.initFrankaVelFT(robot_hw,&state_handle_,&model_handle_,&joint_handles_,FT_sensor,external_force_computation,0);
+            initOperations.initFrankaVelFT(robot_hw,&state_handle_,&model_handle_,&joint_handles_,FT_sensor,external_force_computation,0,"enxa0cec88b0292");
             if (!node_handle.getParam("m_tr", m_tr_)) {
                 ROS_ERROR_STREAM("HandGuidanceController: could not get m_tr from parameter server");
                 return false;
@@ -204,6 +206,7 @@ namespace trial_controller_velocity
                     }
                 }
                 if (limits_violated) {
+                    auto start = std::chrono::system_clock::now();
                     double k1 = 1;
                     double k2 = 1;
                     qpOASES::real_t H[2*2];
@@ -253,7 +256,10 @@ namespace trial_controller_velocity
                     qpOASES::real_t lb[2] = {m_tr_,d_tr_};
                     qpOASES::real_t ub[2] = {qpOASES::INFTY,qpOASES::INFTY};
                     qpOASES::SQProblem opt_problem( 2,14 );
-                    qpOASES::returnValue return_value = opt_problem.init( H,g,A,lb,ub,lbA,ubA, nWSR,0,solution );             
+                    qpOASES::returnValue return_value = opt_problem.init( H,g,A,lb,ub,lbA,ubA, nWSR,0,solution );
+                    auto end = std::chrono::system_clock::now();
+                    std::chrono::duration<double> elapsed_time = end-start;
+                    std::cout << elapsed_time.count() << std::endl;
                     opt_problem.getPrimalSolution(solution);
                     optimization_result = qpOASES::getSimpleStatus(return_value);
                     Eigen::Matrix<double,6,1> v_adm_lim = Eigen::Matrix<double,6,1>::Zero();
@@ -305,7 +311,7 @@ namespace trial_controller_velocity
 //                             lbA_delta[i] = lbA_eigen_delta[i];
 //                         }
 //                         int nWSR_delta = 100;
-// //                         qpOASES::real_t lb_delta[2] = {m_tr_,d_tr_};
+// //                         qpOASES::real_t lb_delta[2] = {m_tr_,d_tr_}; time
 // //                         qpOASES::real_t ub_delta[2] = {qpOASES::INFTY,qpOASES::INFTY};
 //                         qpOASES::SQProblem opt_problem_delta( 6,7 );
 //                         qpOASES::returnValue return_value_delta = opt_problem_delta.init( H_delta,g_delta,A_delta,NULL,NULL,lbA_delta,ubA_delta, nWSR_delta,0,solution_delta );             
@@ -355,6 +361,10 @@ namespace trial_controller_velocity
 //                     for (size_t i = 0; i < 7; i++) {
 //                         dq_c_lim(i) = std::max(std::min(dq_c[i], dq_max_safe[i]), dq_min_safe[i]);
 //                     }
+                    
+                    for (size_t i = 0; i < 7; i++) {
+                        dq_c_lim(i) = std::max(std::min(dq_c[i], dq_max_safe[i]), dq_min_safe[i]);
+                    }
                 }
                 else {
                     dq_c_lim = dq_c;
@@ -364,6 +374,7 @@ namespace trial_controller_velocity
         F_ext_EE_0_lowpass_prev_ = F_ext_EE_0_lowpass;
         for (size_t i = 0; i < 7; i++) {
             joint_handles_[i].setCommand(dq_c_lim(i));
+//             joint_handles_[i].setCommand(0);
         }
         
         Eigen::Matrix<double,2,1> u_eigen;
