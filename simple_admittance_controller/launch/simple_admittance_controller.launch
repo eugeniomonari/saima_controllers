@@ -15,7 +15,7 @@
   <arg name="move_to_ready" default="true" />
   <group if="$(arg move_to_ready)">
     <include file="$(find panda_moveit_config)/launch/panda_control_moveit_rviz.launch">
-      <arg name="load_driller_new" value="true" />
+      <arg name="load_drill_old" value="true" />
     </include>
   </group>
   

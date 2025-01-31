@@ -1,8 +1,0 @@
-<?xml version="1.0" ?>
-<launch>
-  <rosparam command="load" file="$(find data_extraction)/config/data_extraction.yaml"/>
-  <include file="$(find panda_moveit_config)/launch/panda_control_moveit_rviz.launch">
-    <arg name="load_gripper" value="false" />
-  </include>
-  <node name="move_to_pose_test" pkg="identification_tests" type="move_to_pose_test.py" output="screen" required="true" />
-</launch>
