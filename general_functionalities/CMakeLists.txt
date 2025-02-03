@@ -7,7 +7,11 @@ project(general_functionalities)
 ## Find catkin macros and libraries
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
 ## is used, also find other catkin packages
-find_package(catkin REQUIRED franka_hw panda_ecat_comm)
+find_package(catkin REQUIRED
+  franka_hw
+  panda_ecat_comm
+  moveit_core
+  moveit_ros_planning_interface)
 
 find_package(Eigen3 REQUIRED)
 find_package(Franka 0.7.0 REQUIRED)
@@ -106,6 +110,8 @@ catkin_package(
  LIBRARIES general_functionalities panda_ecat_comm
  CATKIN_DEPENDS franka_hw
  DEPENDS Franka
+ moveit_core
+ moveit_ros_planning_interface
 )
 
 ###########

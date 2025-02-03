@@ -67,9 +67,8 @@ namespace general_functionalities
             }
         }
     }
-
     
-    bool initial_operations::initFrankaVelFT(hardware_interface::RobotHW* robot_hw, std::unique_ptr<franka_hw::FrankaStateHandle>* state_handle, std::unique_ptr<franka_hw::FrankaModelHandle>* model_handle,std::vector<hardware_interface::JointHandle>* joint_handles, panda_ecat_comm::ecatCommATIAxiaFTSensor& FT_sensor, EEPoleBaseFrameExtWrenchComputation& external_force_computation, int filter_level, std::string eth_interface_name)
+    bool initial_operations::initFrankaVelFT(hardware_interface::RobotHW* robot_hw, std::unique_ptr<franka_hw::FrankaStateHandle>* state_handle, std::unique_ptr<franka_hw::FrankaModelHandle>* model_handle,std::vector<hardware_interface::JointHandle>* joint_handles, panda_ecat_comm::ecatCommATIAxiaFTSensor& FT_sensor, EEPoleBaseFrameExtWrenchComputation& external_force_computation, int filter_level, std::string eth_interface_name, std::unique_ptr<planning_scene::PlanningScene>* planning_scene)
     {
         std::string arm_id ("panda");
         std::vector<std::string> joint_names = {"panda_joint1","panda_joint2","panda_joint3","panda_joint4","panda_joint5","panda_joint6","panda_joint7"};
@@ -79,7 +78,7 @@ namespace general_functionalities
                 "NullspaceController: Error getting state interface from hardware");
             return false;
         }
-        try {
+        try {robot_model_loader::RobotModelLoader robot_model_loader("robot_description");
             *state_handle = std::make_unique<franka_hw::FrankaStateHandle>(
                 state_interface->getHandle(arm_id + "_robot"));
         } catch (hardware_interface::HardwareInterfaceException& ex) {
@@ -138,6 +137,10 @@ namespace general_functionalities
         Eigen::Matrix<double, 3, 3> EE_R_O_initial = O_T_EE_initial.block(0, 0, 3, 3).transpose();
         external_force_computation.s_R_0_initial_ = external_force_computation.s_R_EE_ * EE_R_O_initial;
 
+        robot_model_loader::RobotModelLoader robot_model_loader("robot_description");
+        robot_model::RobotModelPtr kinematic_model = robot_model_loader.getModel();
+        *planning_scene = std::make_unique<planning_scene::PlanningScene>(kinematic_model);
+        
             return true;
     }
     
@@ -148,6 +151,36 @@ namespace general_functionalities
                 bias_error = true;
             }
             bias_checked = true;
+        }
+    }
+    
+    void collision_free_command::setCommand(Eigen::Matrix<double,7,1> q_d, Eigen::Matrix<double,7,1> dq_c, std::unique_ptr<planning_scene::PlanningScene>* planning_scene, std::vector<hardware_interface::JointHandle>* joint_handles) {
+        if (!collision_happened_) {
+            robot_state::RobotState& current_state = (*planning_scene)->getCurrentStateNonConst();
+            double T = 0.001;
+            Eigen::Matrix<double,7,1> q_c = q_d+dq_c*T;
+            const double q_c_array[7] = {q_c[0],q_c[1],q_c[2],q_c[3],q_c[4],q_c[5],q_c[6]};
+            current_state.setVariablePositions(q_c_array);
+            collision_detection::CollisionRequest collision_request;
+            collision_detection::CollisionResult collision_result;
+            (*planning_scene)->checkSelfCollision(collision_request, collision_result);
+            if (!collision_result.collision) {
+                for (size_t i = 0; i < 7; i++) {
+                    (*joint_handles)[i].setCommand(dq_c(i));
+                }
+            }
+            else {
+                std::cout << "COLLISION DETECTED" << std::endl;
+                collision_happened_ = true;
+                for (size_t i = 0; i < 7; i++) {
+                    (*joint_handles)[i].setCommand(0);
+                }
+            }
+        }
+        else {
+            for (size_t i = 0; i < 7; i++) {
+                (*joint_handles)[i].setCommand(0);
+            }
         }
     }
 

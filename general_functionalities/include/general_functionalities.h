@@ -5,6 +5,9 @@
 #include <franka_hw/franka_model_interface.h>
 #include <hardware_interface/joint_command_interface.h>
 #include <panda_ecat_comm.h>
+#include <moveit/robot_model_loader/robot_model_loader.h>
+#include <moveit/planning_scene/planning_scene.h>
+#include <ros/ros.h>
 
 namespace general_functionalities
 {
@@ -33,15 +36,16 @@ namespace general_functionalities
     
     class initial_operations {
         public:
-            bool initFrankaVelFT(hardware_interface::RobotHW* robot_hw, std::unique_ptr<franka_hw::FrankaStateHandle>* state_handle, std::unique_ptr<franka_hw::FrankaModelHandle>* model_handle,std::vector<hardware_interface::JointHandle>* joint_handles, panda_ecat_comm::ecatCommATIAxiaFTSensor& FT_sensor, EEPoleBaseFrameExtWrenchComputation& external_force_computation, int filter_level, std::string eth_interface_name);
+            bool initFrankaVelFT(hardware_interface::RobotHW* robot_hw, std::unique_ptr<franka_hw::FrankaStateHandle>* state_handle, std::unique_ptr<franka_hw::FrankaModelHandle>* model_handle,std::vector<hardware_interface::JointHandle>* joint_handles, panda_ecat_comm::ecatCommATIAxiaFTSensor& FT_sensor, EEPoleBaseFrameExtWrenchComputation& external_force_computation, int filter_level, std::string eth_interface_name, std::unique_ptr<planning_scene::PlanningScene>* planning_scene);
             void check_initial_bias(panda_ecat_comm::ecatCommATIAxiaFTSensor& FT_sensor);
             bool bias_checked = false;
             bool bias_error = false;
             int filter_level_;
     };
     
-    
-    
-    
-    
+    class collision_free_command {
+        public:
+            bool collision_happened_ = false;
+            void setCommand(Eigen::Matrix<double,7,1> q_d, Eigen::Matrix<double,7,1> dq_c, std::unique_ptr<planning_scene::PlanningScene>* planning_scene,std::vector<hardware_interface::JointHandle>* joint_handles);
+    };    
 }

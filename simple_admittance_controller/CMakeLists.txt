@@ -52,6 +52,7 @@ add_dependencies(simple_admittance_controller
 target_link_libraries(simple_admittance_controller PUBLIC
   ${Franka_LIBRARIES}
   ${catkin_LIBRARIES}
+  ${Boost_LIBRARIES}
 )
 
 target_include_directories(simple_admittance_controller SYSTEM PUBLIC

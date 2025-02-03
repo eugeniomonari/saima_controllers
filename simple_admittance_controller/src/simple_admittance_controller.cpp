@@ -4,6 +4,7 @@
 #include <chrono>
 #include <ctime>
 
+
 namespace simple_admittance_controller
 {
     bool SimpleAdmittanceController::init(hardware_interface::RobotHW* robot_hw, ros::NodeHandle& node_handle)
@@ -18,7 +19,7 @@ namespace simple_admittance_controller
             ROS_ERROR_STREAM("HandGuidanceController: could not get FT_filter_level from parameter server");
             return false;
         }
-        initOperations.initFrankaVelFT(robot_hw,&state_handle_,&model_handle_,&joint_handles_,FT_sensor,external_force_computation,FT_filter_level,eth_interface_name);
+        initOperations.initFrankaVelFT(robot_hw,&state_handle_,&model_handle_,&joint_handles_,FT_sensor,external_force_computation,FT_filter_level,eth_interface_name, &planning_scene_);
         if (!node_handle.getParam("m_tr", m_tr_)) {
             ROS_ERROR_STREAM("HandGuidanceController: could not get m_tr from parameter server");
             return false;
@@ -134,9 +135,26 @@ namespace simple_admittance_controller
             }
             dq_c_lim(i) = std::max(std::min(dq_c[i], dq_max_safe[i]), dq_min_safe[i]);
         }
-        for (size_t i = 0; i < 7; i++) {
-            joint_handles_[i].setCommand(dq_c_lim(i));
-        }
+        
+//         robot_state::RobotState& current_state = planning_scene_->getCurrentStateNonConst();
+//         const std::vector<std::string> names = current_state.getVariableNames();
+//         const double desired_positions[7] = {0,-0.785,0,-2.356,0,1.571,0.785};
+//         current_state.setVariablePositions(desired_positions);
+//         collision_detection::CollisionRequest collision_request;
+//         collision_detection::CollisionResult collision_result;
+//         planning_scene_->checkSelfCollision(collision_request, collision_result);
+//         ROS_INFO_STREAM("Test 1: Current state is " << (collision_result.collision ? "in" : "not in") << " self collision");
+/*        double* positions = current_state.getVariablePositions();
+//         const double* poss = current_state.getJointPositions("panda_joint1");
+//         std::cout << names[7] << std::endl;
+        std::cout << positions[0] << " " << positions[1] << " " << positions[6] << std::endl;*/ 
+//         robot_state::RobotState& current_state = planning_scene_.getCurrentStateNonConst();
+        collisionFreeCommand.setCommand(q_d,dq_c_lim,&planning_scene_,&joint_handles_);
+        
+//         for (size_t i = 0; i < 7; i++) {
+//             joint_handles_[i].setCommand(dq_c_lim(i));
+//         }
+
         
         std::vector<Eigen::VectorXd> custom_data(15);
         custom_data[0] = F_ext_EE_0;

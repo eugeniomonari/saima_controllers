@@ -52,7 +52,8 @@
   
   <depend>franka_hw</depend>
   <depend>panda_ecat_comm</depend>
-
+  <depend>moveit_core</depend>
+  <depend>moveit_ros_planning_interface</depend>
 
   <!-- The export tag contains other, unspecified, tags -->
   <export>

@@ -10,10 +10,12 @@
 #include <panda_ecat_comm.h>
 #include <data_extraction.h>
 #include <general_functionalities.h>
-// #include <optimizer6_bindings.hpp>
-
 #include <simple_admittance_controller/simple_admittance_controller_paramConfig.h>
 #include <dynamic_reconfigure/server.h>
+
+#include <moveit/robot_model_loader/robot_model_loader.h>
+#include <moveit/planning_scene/planning_scene.h>
+#include <ros/ros.h>
 
 namespace simple_admittance_controller
 {
@@ -68,6 +70,8 @@ namespace simple_admittance_controller
         ros::NodeHandle dynamic_reconfigure_simple_admittance_controller_param_node_;
         void trialControllerVelocityParamCallback(simple_admittance_controller::simple_admittance_controller_paramConfig& config, uint32_t level);
         bool dyn_params_set = false;
+        std::unique_ptr<planning_scene::PlanningScene> planning_scene_;
+        general_functionalities::collision_free_command collisionFreeCommand;
     };
         
 }
