@@ -100,7 +100,7 @@ namespace simple_admittance_controller
         Eigen::Matrix<double,7,1> dq_max_safe;
         Eigen::Matrix<double,7,1> dq_min_safe;
         for (size_t i = 0; i < 7; i++) {
-            velocity_limits = setSafeVelocities(kMaxJointVelocity[i],kMaxJointAcceleration[i],kMaxJointJerk[i],dq_d[i],ddq_d[i]);
+            velocity_limits = setSafeVelocities(kMaxJointPosition[i],kMinJointPosition[i],kMaxJointVelocity[i],kMaxJointAcceleration[i],kMaxJointJerk[i],q_d[i],dq_d[i],ddq_d[i]);
             dq_min_safe[i] = velocity_limits[0];
             dq_max_safe[i] = velocity_limits[1];
         }
@@ -219,15 +219,15 @@ namespace simple_admittance_controller
         data_extraction_.started = false;
     }
     
-    Eigen::Matrix<double,2,1> SimpleAdmittanceController::setSafeVelocities(double max_velocity,double max_acceleration,double max_jerk,double last_commanded_velocity,double last_commanded_acceleration) {
+    Eigen::Matrix<double,2,1> SimpleAdmittanceController::setSafeVelocities(double max_position, double min_position, double max_velocity,double max_acceleration,double max_jerk,double last_commanded_position,double last_commanded_velocity,double last_commanded_acceleration) {
         double safe_max_acceleration = std::max(std::min({
             (max_jerk / max_acceleration) * (max_velocity - last_commanded_velocity), max_acceleration,last_commanded_acceleration+max_jerk*kDeltaT}),last_commanded_acceleration-max_jerk*kDeltaT);
         double safe_min_acceleration = std::min(std::max({
             (max_jerk / max_acceleration) * (-max_velocity - last_commanded_velocity), -max_acceleration,last_commanded_acceleration-max_jerk*kDeltaT}),last_commanded_acceleration+max_jerk*kDeltaT);
         Eigen::Matrix<double,2,1> safe_velocities;
         safe_velocities.setZero();
-        safe_velocities[0] = last_commanded_velocity+safe_min_acceleration*kDeltaT;
-        safe_velocities[1] = last_commanded_velocity+safe_max_acceleration*kDeltaT;
+        safe_velocities[0] = std::min(std::max(last_commanded_velocity+safe_min_acceleration*kDeltaT,(max_acceleration / max_velocity) * (min_position - last_commanded_position)),last_commanded_velocity+safe_max_acceleration*kDeltaT);
+        safe_velocities[1] = std::max(std::min(last_commanded_velocity+safe_max_acceleration*kDeltaT,(max_acceleration / max_velocity) * (max_position - last_commanded_position)),last_commanded_velocity+safe_min_acceleration*kDeltaT);
         return safe_velocities;
     }
     

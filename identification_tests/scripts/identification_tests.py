@@ -36,7 +36,21 @@ if __name__ == '__main__':
     rospy.wait_for_service('/controller_manager/load_controller')
     load_controller = rospy.ServiceProxy('/controller_manager/load_controller', LoadController)
     load_controller('data_extraction_controller')
-    for i in range(100):
+    rospy.wait_for_service('/controller_manager/switch_controller')
+    switch_controller = rospy.ServiceProxy('/controller_manager/switch_controller', SwitchController)
+    start = ['data_extraction_controller']
+    #start = []
+    stop = []
+    switch_controller(start, stop, 2, False, 0)
+    rospy.sleep(5)
+    start = []
+    stop = ['position_joint_trajectory_controller']
+    switch_controller(start, stop, 2, False, 0)
+    start = []
+    stop = ['data_extraction_controller']
+    #stop = []
+    switch_controller(start, stop, 2, False, 0)
+    for i in range(15):
         # move to configuration
         plan_ok = False
         print("\nIteration " + str(i + 1) + "\n")
@@ -71,4 +85,29 @@ if __name__ == '__main__':
         stop = ['data_extraction_controller']
         #stop = []
         switch_controller(start, stop, 2, False, 0)
+        
+    rospy.wait_for_service('/controller_manager/switch_controller')
+    switch_controller = rospy.ServiceProxy('/controller_manager/switch_controller', SwitchController)
+    start = ['position_joint_trajectory_controller']
+    stop = []
+    switch_controller(start, stop, 2, False, 0)
+    commander = MoveGroupCommander('panda_arm')
+    commander.set_named_target('ready')
+    plan = commander.plan()
+    commander.go(wait=True)
+    rospy.wait_for_service('/controller_manager/switch_controller')
+    switch_controller = rospy.ServiceProxy('/controller_manager/switch_controller', SwitchController)
+    start = ['data_extraction_controller']
+    #start = []
+    stop = []
+    switch_controller(start, stop, 2, False, 0)
+    rospy.sleep(5)
+    start = []
+    stop = ['position_joint_trajectory_controller']
+    switch_controller(start, stop, 2, False, 0)
+    start = []
+    stop = ['data_extraction_controller']
+    #stop = []
+    switch_controller(start, stop, 2, False, 0)
+    
     raw_input("Press enter to stop\n")

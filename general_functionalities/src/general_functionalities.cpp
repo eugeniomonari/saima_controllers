@@ -4,8 +4,33 @@
 namespace general_functionalities
 {
     Eigen::Matrix<double, 6, 1> EEPoleBaseFrameExtWrenchComputation::computeEEPoleBaseFrameExtWrench(const Eigen::Matrix<double, 4, 4>& O_T_EE, const Eigen::Matrix<double, 6, 1>& sensor_data, bool bias_checked, bool bias_error, bool ecat_error) {
-        double mass_calib = 0.288;
-        double max_gravity_torque = 0.045;
+//         double mass_calib = 0.377;
+//         double max_gravity_torque = 0.045;
+//         Eigen::Matrix<double,3,1> r_s = Eigen::Vector3d(0,0,-0.088);
+//         Eigen::Matrix<double, 6, 1> F_ext_S_s;
+//         Eigen::Vector3d gravity_force_0(0, 0, -mass_calib * 9.81);
+//         Eigen::Vector3d gravity_force_s_initial = s_R_0_initial_ * gravity_force_0;
+//         Eigen::Matrix<double, 3, 3> EE_R_O = O_T_EE.block(0, 0, 3, 3).transpose();
+//         Eigen::Matrix3d s_R_0 = s_R_EE_ * EE_R_O;
+//         Eigen::Vector3d gravity_force_s = s_R_0 * gravity_force_0;
+//         F_ext_S_s.head(3) = sensor_data.head(3) + gravity_force_s_initial - gravity_force_s;
+//         
+//         Eigen::Vector3d r_hat_s(0, 0, 1);
+//         Eigen::Vector3d gravity_force_hat_0(0, 0, -1);
+//         Eigen::Vector3d gravity_force_hat_s_initial = s_R_0_initial_ * gravity_force_hat_0;
+//         Eigen::Vector3d gravity_torque_s_initial = max_gravity_torque * r_hat_s.cross(gravity_force_hat_s_initial);
+//         Eigen::Vector3d gravity_force_hat_s = s_R_0 * gravity_force_hat_0;
+//         Eigen::Vector3d gravity_torque_s = max_gravity_torque * r_hat_s.cross(gravity_force_hat_s);
+//         F_ext_S_s.tail(3) = sensor_data.tail(3) + gravity_torque_s_initial - gravity_torque_s;
+//         Eigen::Matrix<double, 6, 1> F_ext_EE_0;
+//         Eigen::Matrix3d O_R_s = s_R_0.transpose();
+//         F_ext_EE_0.head(3) = O_R_s * F_ext_S_s.head(3);
+//         Eigen::Vector3d r_O = O_R_s * r_s;
+//         Eigen::Vector3d F_O = F_ext_EE_0.head(3);
+//         F_ext_EE_0.tail(3) = O_R_s * F_ext_S_s.tail(3) + r_O.cross(F_O);
+        
+        
+        double mass_calib = 0.377;
         Eigen::Matrix<double,3,1> r_s = Eigen::Vector3d(0,0,-0.088);
         Eigen::Matrix<double, 6, 1> F_ext_S_s;
         Eigen::Vector3d gravity_force_0(0, 0, -mass_calib * 9.81);
@@ -15,19 +40,15 @@ namespace general_functionalities
         Eigen::Vector3d gravity_force_s = s_R_0 * gravity_force_0;
         F_ext_S_s.head(3) = sensor_data.head(3) + gravity_force_s_initial - gravity_force_s;
         
-        Eigen::Vector3d r_hat_s(0, 0, 1);
-        Eigen::Vector3d gravity_force_hat_0(0, 0, -1);
-        Eigen::Vector3d gravity_force_hat_s_initial = s_R_0_initial_ * gravity_force_hat_0;
-        Eigen::Vector3d gravity_torque_s_initial = max_gravity_torque * r_hat_s.cross(gravity_force_hat_s_initial);
-        Eigen::Vector3d gravity_force_hat_s = s_R_0 * gravity_force_hat_0;
-        Eigen::Vector3d gravity_torque_s = max_gravity_torque * r_hat_s.cross(gravity_force_hat_s);
+        Eigen::Vector3d r_s_calib(0.004,-0.0233,0.0312);
+        Eigen::Vector3d gravity_torque_s_initial = mass_calib * r_s_calib.cross(gravity_force_s_initial);
+        Eigen::Vector3d gravity_torque_s = mass_calib * r_s_calib.cross(gravity_force_s);
         F_ext_S_s.tail(3) = sensor_data.tail(3) + gravity_torque_s_initial - gravity_torque_s;
+        
         Eigen::Matrix<double, 6, 1> F_ext_EE_0;
         Eigen::Matrix3d O_R_s = s_R_0.transpose();
         F_ext_EE_0.head(3) = O_R_s * F_ext_S_s.head(3);
-        Eigen::Vector3d r_O = O_R_s * r_s;
-        Eigen::Vector3d F_O = F_ext_EE_0.head(3);
-        F_ext_EE_0.tail(3) = O_R_s * F_ext_S_s.tail(3) + r_O.cross(F_O);
+        F_ext_EE_0.tail(3) = O_R_s * F_ext_S_s.tail(3);
         if (!(bias_checked && !bias_error & !ecat_error)) {
             F_ext_EE_0.setZero();
             if (!bias_checked) {

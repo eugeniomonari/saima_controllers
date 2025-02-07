@@ -58,7 +58,23 @@ namespace simple_admittance_controller
             2.6100 - kLimitEps - kTolNumberPacketsLost* kDeltaT* kMaxJointAcceleration[4],
             2.6100 - kLimitEps - kTolNumberPacketsLost* kDeltaT* kMaxJointAcceleration[5],
             2.6100 - kLimitEps - kTolNumberPacketsLost* kDeltaT* kMaxJointAcceleration[6]}};
-        Eigen::Matrix<double,2,1> setSafeVelocities(double max_velocity,double max_acceleration,double max_jerk,double last_commanded_velocity,double last_commanded_acceleration);
+        std::array<double, 7> kMaxJointPosition{
+            {2.8973 - kLimitEps - kTolNumberPacketsLost * kDeltaT * kMaxJointVelocity[0],
+            1.7628 - kLimitEps - kTolNumberPacketsLost* kDeltaT* kMaxJointVelocity[1],
+            2.8973 - kLimitEps - kTolNumberPacketsLost* kDeltaT* kMaxJointVelocity[2],
+            -0.0698 - kLimitEps - kTolNumberPacketsLost* kDeltaT* kMaxJointVelocity[3],
+            2.8973 - kLimitEps - kTolNumberPacketsLost* kDeltaT* kMaxJointVelocity[4],
+            3.7525 - kLimitEps - kTolNumberPacketsLost* kDeltaT* kMaxJointVelocity[5],
+            2.8973 - kLimitEps - kTolNumberPacketsLost* kDeltaT* kMaxJointVelocity[6]}};
+        std::array<double, 7> kMinJointPosition{
+            {-2.8973 - kLimitEps - kTolNumberPacketsLost * kDeltaT * -kMaxJointVelocity[0],
+            -1.7628 - kLimitEps - kTolNumberPacketsLost* kDeltaT* -kMaxJointVelocity[1],
+            -2.8973 - kLimitEps - kTolNumberPacketsLost* kDeltaT* -kMaxJointVelocity[2],
+            -3.0718 - kLimitEps - kTolNumberPacketsLost* kDeltaT* -kMaxJointVelocity[3],
+            -2.8973 - kLimitEps - kTolNumberPacketsLost* kDeltaT* -kMaxJointVelocity[4],
+            -0.0175 - kLimitEps - kTolNumberPacketsLost* kDeltaT* -kMaxJointVelocity[5],
+            -2.8973 - kLimitEps - kTolNumberPacketsLost* kDeltaT* -kMaxJointVelocity[6]}};
+        Eigen::Matrix<double,2,1> setSafeVelocities(double max_position, double min_position, double max_velocity,double max_acceleration,double max_jerk,double last_commanded_position,double last_commanded_velocity,double last_commanded_acceleration);
         general_functionalities::EEPoleBaseFrameExtWrenchComputation external_force_computation;
         general_functionalities::initial_operations initOperations;
         bool only_transl_ = false;

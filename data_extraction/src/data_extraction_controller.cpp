@@ -86,6 +86,7 @@ namespace data_extraction
         std::vector<std::string> custom_header_values{"F_ext_S_s"};
         data_extraction_.write_data_to_csv_sequential(custom_header_values);
         data_extraction_.started = false;
+        data_extraction_.data_buffer.clear();
     }
     
 }

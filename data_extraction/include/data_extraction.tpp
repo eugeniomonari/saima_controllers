@@ -187,6 +187,10 @@ namespace data_extraction
             std::string filename = "/home/saima/recorded_data/recorded_data_identification_" + date + std::to_string(sequential_number_) + ".csv";
             std::ofstream myfile;
             myfile.open(filename);
+            csv_header.str("");
+            csv_header.clear();
+            csv_data.str("");
+            csv_data.clear();
             std::vector<std::string> header_values;
             if (!only_custom)
             {
