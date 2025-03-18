@@ -1,0 +1,27 @@
+<?xml version="1.0" ?>
+<launch>
+    
+  <node name="usb_connection_node" pkg="nullspace_admittance_controller" type="usb_connection.py"  output="screen"/>
+    
+  <arg name="robot_ip" default="172.16.0.2"/>
+  <arg name="load_gripper" default="false" />
+  <arg name="move_to_ready" default="true" />
+  <include file="$(find franka_control)/launch/franka_control.launch" >
+    <arg name="robot_ip" value="$(arg robot_ip)" />
+    <arg name="load_gripper" value="$(arg load_gripper)" />
+  </include>
+  <include file="$(find panda_moveit_config)/launch/panda_moveit.launch">
+    <arg name="load_gripper" value="false" />
+    <arg name="load_drill_old" value="true" />
+  </include>
+  <include file="$(find nullspace_admittance_controller)/launch/moveit_rviz.launch"/>
+    
+<!--   <node name="testOrbbecTracking" pkg="bobot_inail" type="testOrbbecTracking"  output="screen"/>   -->
+
+  <rosparam command="load" file="$(find nullspace_admittance_controller)/config/nullspace_admittance_controller.yaml" />
+  <node name="nullspace_admittance_controller_node" pkg="nullspace_admittance_controller" type="nullspace_admittance_controller.py" output="screen" clear_params="true">
+       <param name="move_to_ready" value="$(arg move_to_ready)" /> 
+  </node>
+  <node name="rqt_reconfigure" pkg="rqt_reconfigure" type="rqt_reconfigure" required="false" />
+
+</launch>
